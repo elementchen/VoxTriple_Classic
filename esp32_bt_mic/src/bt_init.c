@@ -24,6 +24,7 @@
 #include "bt_app_core.h"
 #include "bt_app_hf.h"
 #include "config_storage.h"
+#include "bt_config.h"
 
 static const char *TAG = "BT_INIT";
 
@@ -128,6 +129,7 @@ static void bt_stack_up_handler(uint16_t event, void *p_param)
             }
         }
 
+#if ENABLE_CLASSIC_BT_MIC
         /* Set device name for Classic BT */
         esp_bt_gap_set_device_name(g_bt_device_name);
 
@@ -171,6 +173,9 @@ static void bt_stack_up_handler(uint16_t event, void *p_param)
         esp_bt_gap_set_scan_mode(ESP_BT_NON_CONNECTABLE, ESP_BT_NON_DISCOVERABLE);
 
         ESP_LOGI(TAG, "BT stack initialized, name: %s (Classic BT hidden initially)", g_bt_device_name);
+#else
+        ESP_LOGI(TAG, "BT stack initialized (Classic BT disabled entirely)");
+#endif
         break;
     }
     default:
@@ -224,6 +229,7 @@ esp_err_t bt_stack_init(void)
         return ret;
     }
 
+#if ENABLE_CLASSIC_BT_MIC
     /* 立即同步设置经典蓝牙为不可被搜索和连接，防止在初始化期间泄露广播 */
     esp_bt_gap_set_scan_mode(ESP_BT_NON_CONNECTABLE, ESP_BT_NON_DISCOVERABLE);
 
@@ -233,6 +239,7 @@ esp_err_t bt_stack_init(void)
         snprintf(g_bt_device_name, sizeof(g_bt_device_name),
                  "ESP32_MIC_%02X", addr[5]);
     }
+#endif
 
     ESP_LOGI(TAG, "Bluetooth controller mode: BTDM (dual mode)");
 
@@ -245,6 +252,7 @@ esp_err_t bt_stack_init(void)
     return ESP_OK;
 }
 
+#if ENABLE_CLASSIC_BT_MIC
 static bool s_classic_bt_activated = false;
 
 void bt_classic_activate(void)
@@ -274,3 +282,7 @@ void bt_classic_deactivate(void)
         esp_hf_client_disconnect(hf_peer_addr);
     }
 }
+#else
+void bt_classic_activate(void) {}
+void bt_classic_deactivate(void) {}
+#endif

@@ -23,6 +23,7 @@
 #include "config_storage.h"
 #include "bt_init.h"
 #include "esp_hf_client_api.h"
+#include "bt_config.h"
 
 static const char *TAG = "BLE_GATTS";
 
@@ -656,7 +657,9 @@ static void gatts_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_
         s_conn_id = 0;
 
         /* BLE 断开时，停用经典蓝牙（隐藏广播并断开连接） */
+#if ENABLE_CLASSIC_BT_MIC
         bt_classic_deactivate();
+#endif
 
         /* Aggressive retry: first disconnect → immediate restart.
          * If it fails again quickly (BTDM conflict), back off to 3s. */

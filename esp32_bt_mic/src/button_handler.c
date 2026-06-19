@@ -18,6 +18,7 @@
 #include "config_storage.h"
 #include "bt_init.h"
 #include "esp_hf_client_api.h"
+#include "bt_config.h"
 
 static const char *TAG = "BTN_HANDLER";
 
@@ -110,8 +111,10 @@ static void button_task_func(void *arg)
                     if (!ble_hid_is_connected()) {
                         ble_gatts_adv_start();
                     } else {
+#if ENABLE_CLASSIC_BT_MIC
                         bt_classic_activate();
                         bt_hfp_hf_wake_acl();
+#endif
                     }
 
                     /* Indicator LED on Button 1 press — only if BLE is connected */

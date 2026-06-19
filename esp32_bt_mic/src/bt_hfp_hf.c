@@ -65,9 +65,9 @@ static int32_t s_ma_sum = 0;
 static uint8_t s_ma_idx = 0;
 static uint8_t s_ma_fill = 0;
 
-/* Noise gate (disabled by default; uncomment call in audio_dsp_process) */
-#define GATE_THRESHOLD   1638
-#define GATE_HOLD_COUNT    18
+/* Noise gate parameters — tuned for 16kHz sampling rate */
+#define GATE_THRESHOLD   1200      /* Threshold for digital gain boosted signal to open the gate */
+#define GATE_HOLD_COUNT  2400      /* Hold time: 2400 samples = 150ms @ 16kHz to prevent stutter/chopping */
 static int s_gate_hold = 0;
 static bool s_gate_open = true;
 static int64_t s_env = 0;
@@ -148,7 +148,7 @@ static void audio_dsp_process(uint8_t *buf, size_t len)
     apply_hpf(buf, len);               /* remove low-frequency rumble */
     apply_moving_average(buf, len);    /* smooth digital hiss/spikes */
     apply_gain(buf, len);              /* boost volume (3x = ~9.5dB) */
-    // apply_noise_gate(buf, len);     /* uncomment to enable gate */
+    apply_noise_gate(buf, len);        /* enable noise gate to eliminate quiet environment hiss */
 }
 
 #if CONFIG_BT_HFP_AUDIO_DATA_PATH_HCI

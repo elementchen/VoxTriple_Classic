@@ -21,6 +21,7 @@
 #include "button_handler.h"
 #include "config_storage.h"
 #include "ble_hid_keyboard.h"
+#include "bt_config.h"
 
 static const char *TAG = "MAIN";
 
@@ -52,7 +53,11 @@ void app_main(void)
 
     /* Step 3: Initialize I2S microphone driver */
     ESP_LOGI(TAG, "Step 3: Initializing I2S microphone...");
+#if ENABLE_CLASSIC_BT_MIC
     ESP_ERROR_CHECK(audio_capture_init());
+#else
+    ESP_LOGI(TAG, "I2S microphone skipped (Classic BT disabled)");
+#endif
 
     /* Step 4: Initialize Bluetooth stack (dual mode: BTDM) */
     ESP_LOGI(TAG, "Step 4: Initializing Bluetooth stack...");
