@@ -28,19 +28,18 @@
 
 static const char *TAG = "BLE_GATTS";
 
-/* 用于已绑定设备重连时的连接事件延迟分发，防止 esp_hid 与 Windows 加密冲突 */
-static bool s_connect_event_deferred = false;
-static esp_ble_gatts_cb_param_t s_deferred_connect_param;
-static esp_gatt_if_t s_deferred_gatts_if;
-static TimerHandle_t s_deferred_conn_timer = NULL;
+/* GCC 链接器包装函数：接管 esp_ble_set_encryption 并屏蔽已绑定重连时的从端主动加密，防止冲突 */
+extern esp_err_t __real_esp_ble_set_encryption(esp_bd_addr_t bd_addr, esp_ble_sec_act_t sec_act);
 
-static void deferred_conn_timer_cb(TimerHandle_t xTimer)
+esp_err_t __wrap_esp_ble_set_encryption(esp_bd_addr_t bd_addr, esp_ble_sec_act_t sec_act)
 {
-    if (s_connect_event_deferred) {
-        s_connect_event_deferred = false;
-        ESP_LOGI(TAG, "[Timer] Deferred connection timer expired. Forcing dispatch GATTS_CONNECT_EVT to esp_hid");
-        esp_hidd_gatts_event_handler(ESP_GATTS_CONNECT_EVT, s_deferred_gatts_if, &s_deferred_connect_param);
+    int bond_num = esp_ble_get_bond_device_num();
+    if (bond_num > 0) {
+        ESP_LOGI("WRAP_ENC", "Bonded device reconnecting: wrapping esp_ble_set_encryption (ignoring client encrypt request)");
+        return ESP_OK; // 拦截并返回成功，阻止发送 Security Request
     }
+    ESP_LOGI("WRAP_ENC", "No bonds: allowing real esp_ble_set_encryption to initiate pairing");
+    return __real_esp_ble_set_encryption(bd_addr, sec_act); // 放行，进行首次配对
 }
 
 /* ----------------------------------------------------------------
@@ -275,24 +274,11 @@ static void gap_event_handler(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param
         esp_ble_gap_security_rsp(param->ble_security.ble_req.bd_addr, true);
         break;
     case ESP_GAP_BLE_AUTH_CMPL_EVT:
-        if (s_deferred_conn_timer) {
-            xTimerStop(s_deferred_conn_timer, 0);
-        }
         if (param->ble_security.auth_cmpl.success) {
             ESP_LOGI(TAG, "BLE Authentication success");
             print_bonded_devices("AUTH_CMPL");
-            if (s_connect_event_deferred) {
-                s_connect_event_deferred = false;
-                ESP_LOGI(TAG, "Authentication successful: dispatching deferred GATTS_CONNECT_EVT to esp_hid");
-                esp_hidd_gatts_event_handler(ESP_GATTS_CONNECT_EVT, s_deferred_gatts_if, &s_deferred_connect_param);
-            }
         } else {
             ESP_LOGE(TAG, "BLE Authentication failed, reason = 0x%x", param->ble_security.auth_cmpl.fail_reason);
-            if (s_connect_event_deferred) {
-                s_connect_event_deferred = false;
-                ESP_LOGI(TAG, "Authentication failed: dispatching deferred GATTS_CONNECT_EVT to esp_hid anyway");
-                esp_hidd_gatts_event_handler(ESP_GATTS_CONNECT_EVT, s_deferred_gatts_if, &s_deferred_connect_param);
-            }
         }
         break;
     case ESP_GAP_BLE_LOCAL_IR_EVT:
@@ -407,28 +393,7 @@ static void gatts_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_
     }
 
     if (is_hid_event) {
-        if (event == ESP_GATTS_CONNECT_EVT) {
-            int bond_num = esp_ble_get_bond_device_num();
-            if (bond_num > 0) {
-                /* 已绑定设备重连：开启 500ms 定时器延迟分发连接事件，防止从端主动加密与 Windows 冲突，也避免无限拦截导致 Windows 超时闪断 */
-                s_connect_event_deferred = true;
-                s_deferred_gatts_if = gatts_if;
-                memcpy(&s_deferred_connect_param, param, sizeof(esp_ble_gatts_cb_param_t));
-                ESP_LOGI(TAG, "Bonded device reconnecting: deferring GATTS_CONNECT_EVT to esp_hid (timer started for 500ms)");
-                
-                if (s_deferred_conn_timer == NULL) {
-                    s_deferred_conn_timer = xTimerCreate("def_conn_tmr", pdMS_TO_TICKS(500), pdFALSE, NULL, deferred_conn_timer_cb);
-                }
-                if (s_deferred_conn_timer) {
-                    xTimerStart(s_deferred_conn_timer, 0);
-                }
-            } else {
-                s_connect_event_deferred = false;
-                esp_hidd_gatts_event_handler(event, gatts_if, param);
-            }
-        } else {
-            esp_hidd_gatts_event_handler(event, gatts_if, param);
-        }
+        esp_hidd_gatts_event_handler(event, gatts_if, param);
     }
 
     switch (event) {
