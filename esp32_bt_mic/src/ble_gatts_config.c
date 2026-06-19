@@ -101,6 +101,28 @@ static esp_ble_adv_params_t adv_params = {
     .adv_filter_policy  = ADV_FILTER_ALLOW_SCAN_ANY_CON_ANY,
 };
 
+static void print_bonded_devices(const char *caller)
+{
+    int dev_num = esp_ble_get_bond_device_num();
+    ESP_LOGI(TAG, "[%s] Bonded devices count: %d", caller, dev_num);
+    if (dev_num > 0) {
+        esp_ble_bond_dev_t *dev_list = malloc(dev_num * sizeof(esp_ble_bond_dev_t));
+        if (dev_list) {
+            if (esp_ble_get_bond_device_list(&dev_num, dev_list) == ESP_OK) {
+                for (int i = 0; i < dev_num; i++) {
+                    ESP_LOGI(TAG, "  [%d]: BDA %02X:%02X:%02X:%02X:%02X:%02X, key_mask: 0x%X",
+                             i,
+                             dev_list[i].bd_addr[0], dev_list[i].bd_addr[1],
+                             dev_list[i].bd_addr[2], dev_list[i].bd_addr[3],
+                             dev_list[i].bd_addr[4], dev_list[i].bd_addr[5],
+                             dev_list[i].bond_key.key_mask);
+                }
+            }
+            free(dev_list);
+        }
+    }
+}
+
 static void ble_init_adv_data(const char *name)
 {
     /* BLE GAP device name — shorter for advertising budget */
@@ -240,6 +262,7 @@ static void gap_event_handler(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param
     case ESP_GAP_BLE_AUTH_CMPL_EVT:
         if (param->ble_security.auth_cmpl.success) {
             ESP_LOGI(TAG, "BLE Authentication success");
+            print_bonded_devices("AUTH_CMPL");
         } else {
             ESP_LOGE(TAG, "BLE Authentication failed, reason = 0x%x", param->ble_security.auth_cmpl.fail_reason);
         }
@@ -719,6 +742,7 @@ void ble_gatts_init(void)
     }
 
     ESP_LOGI(TAG, "BLE GATT server initialized");
+    print_bonded_devices("GATTS_INIT");
 }
 
 void ble_send_button_event(uint8_t button_id, uint8_t state)
