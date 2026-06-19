@@ -28,18 +28,39 @@
 
 static const char *TAG = "BLE_GATTS";
 
-/* GCC 链接器包装函数：接管 esp_ble_set_encryption 并屏蔽已绑定重连时的从端主动加密，防止冲突 */
+/* GCC 链接器包装函数：延迟 esp_ble_set_encryption 调用，让 Windows 先发起加密。
+ * 完全屏蔽模式会导致 BTM 安全上下文未初始化 → "Device not found"。
+ * 延迟 500ms 后放行，此时 Windows 加密已在进行中，我们的请求被安全入队。 */
 extern esp_err_t __real_esp_ble_set_encryption(esp_bd_addr_t bd_addr, esp_ble_sec_act_t sec_act);
+
+static TimerHandle_t s_delayed_enc_timer = NULL;
+static esp_bd_addr_t s_delayed_enc_addr;
+static esp_ble_sec_act_t s_delayed_enc_act;
+
+static void delayed_enc_timer_cb(TimerHandle_t xTimer)
+{
+    ESP_LOGI("WRAP_ENC", "[Timer] 500ms elapsed — calling real esp_ble_set_encryption");
+    __real_esp_ble_set_encryption(s_delayed_enc_addr, s_delayed_enc_act);
+}
 
 esp_err_t __wrap_esp_ble_set_encryption(esp_bd_addr_t bd_addr, esp_ble_sec_act_t sec_act)
 {
     int bond_num = esp_ble_get_bond_device_num();
     if (bond_num > 0) {
-        ESP_LOGI("WRAP_ENC", "Bonded device reconnecting: wrapping esp_ble_set_encryption (ignoring client encrypt request)");
-        return ESP_OK; // 拦截并返回成功，阻止发送 Security Request
+        ESP_LOGI("WRAP_ENC", "Bonded reconnect: deferring esp_ble_set_encryption by 500ms");
+        memcpy(s_delayed_enc_addr, bd_addr, sizeof(esp_bd_addr_t));
+        s_delayed_enc_act = sec_act;
+        if (s_delayed_enc_timer == NULL) {
+            s_delayed_enc_timer = xTimerCreate("del_enc", pdMS_TO_TICKS(500),
+                                                pdFALSE, NULL, delayed_enc_timer_cb);
+        }
+        if (s_delayed_enc_timer) {
+            xTimerStart(s_delayed_enc_timer, 0);
+        }
+        return ESP_OK; // 立即返回，不阻塞 BTC 任务
     }
     ESP_LOGI("WRAP_ENC", "No bonds: allowing real esp_ble_set_encryption to initiate pairing");
-    return __real_esp_ble_set_encryption(bd_addr, sec_act); // 放行，进行首次配对
+    return __real_esp_ble_set_encryption(bd_addr, sec_act);
 }
 
 /* ----------------------------------------------------------------
