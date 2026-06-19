@@ -150,6 +150,16 @@ static void print_bonded_devices(const char *caller)
                              dev_list[i].bd_addr[2], dev_list[i].bd_addr[3],
                              dev_list[i].bd_addr[4], dev_list[i].bd_addr[5],
                              dev_list[i].bond_key.key_mask);
+                    if (dev_list[i].bond_key.key_mask & ESP_LE_KEY_PID) {
+                        ESP_LOGI(TAG, "    PID key: addr_type = %d, static_addr = %02X:%02X:%02X:%02X:%02X:%02X",
+                                 dev_list[i].bond_key.pid_key.addr_type,
+                                 dev_list[i].bond_key.pid_key.static_addr[0],
+                                 dev_list[i].bond_key.pid_key.static_addr[1],
+                                 dev_list[i].bond_key.pid_key.static_addr[2],
+                                 dev_list[i].bond_key.pid_key.static_addr[3],
+                                 dev_list[i].bond_key.pid_key.static_addr[4],
+                                 dev_list[i].bond_key.pid_key.static_addr[5]);
+                    }
                 }
             }
             free(dev_list);
@@ -184,12 +194,13 @@ static void ble_init_adv_data(const char *name)
     esp_ble_gap_set_security_param(ESP_BLE_SM_IOCAP_MODE, &iocap, 1);
 
     /* 配置对称密钥分发：
-     * 为了在重启后能成功解析 Windows 使用的 RPA (随机私有地址)，
-     * 我们必须双向都交换并分发 ENC_KEY (LTK) 和 ID_KEY (IRK/Identity Address)。
-     * 否则重连时底层会报 Device not found 进而发生 MIC Failure 闪退断连 (rsn 0x3d / rsn 102)。
+     * 在 SC (Secure Connections) 模式下，LTK 是通过 ECDH 计算得出的对称密钥，
+     * 双方无需且不应通过空中分发 ENC_KEY (LTK)。我们只需要分发 ID_KEY (IRK) 即可。
+     * 分发 ENC_KEY 会在 NVS 中写入 LE_KEY_PENC 键，导致重启加载时被 Bluedroid 误判为 Legacy 绑定，
+     * 进而导致加载错误密钥发生 MIC Failure (0x3d) 断连。只分发 ID_KEY 即可正确加载。
      */
-    uint8_t init_key = ESP_BLE_ENC_KEY_MASK | ESP_BLE_ID_KEY_MASK;
-    uint8_t rsp_key = ESP_BLE_ENC_KEY_MASK | ESP_BLE_ID_KEY_MASK;
+    uint8_t init_key = ESP_BLE_ID_KEY_MASK;
+    uint8_t rsp_key = ESP_BLE_ID_KEY_MASK;
     uint8_t key_size = 16;
     esp_ble_gap_set_security_param(ESP_BLE_SM_SET_INIT_KEY, &init_key, 1);
     esp_ble_gap_set_security_param(ESP_BLE_SM_SET_RSP_KEY, &rsp_key, 1);
@@ -293,6 +304,9 @@ static void gap_event_handler(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param
                  param->update_conn_params.timeout);
         break;
 
+    case ESP_GAP_BLE_KEY_EVT:
+        ESP_LOGI(TAG, "BLE KEY_EVT: key_type = 0x%X", param->ble_security.ble_key.key_type);
+        break;
     case ESP_GAP_BLE_SEC_REQ_EVT:
         /* Response to security requests from the peer device */
         esp_ble_gap_security_rsp(param->ble_security.ble_req.bd_addr, true);
