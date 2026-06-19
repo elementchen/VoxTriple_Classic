@@ -154,8 +154,8 @@ static void ble_init_adv_data(const char *name)
     esp_ble_gap_set_device_name(ble_name);
     esp_ble_gap_config_local_icon(0x03C1); // 显式设置 GAP Appearance 为 HID Keyboard，确保首次配对图标正确
 
-    /* BLE SMP — Secure Connections bonding, no I/O capability. */
-    esp_ble_auth_req_t auth_req = ESP_LE_AUTH_REQ_SC_BOND;
+    /* BLE SMP — Legacy bonding (no SC), no I/O capability. */
+    esp_ble_auth_req_t auth_req = ESP_LE_AUTH_BOND;
     esp_ble_io_cap_t iocap = ESP_IO_CAP_NONE;
     esp_ble_gap_set_security_param(ESP_BLE_SM_AUTHEN_REQ_MODE, &auth_req, 1);
     esp_ble_gap_set_security_param(ESP_BLE_SM_IOCAP_MODE, &iocap, 1);
