@@ -1,5 +1,17 @@
 # Changelog
 
+## v2.2-nimble-stable (2026-06-19)
+
+> 纯 NimBLE BLE 键盘完美自动秒连版本。解决了首次连接识别为 NIMBLE、冷置 LMP 自动断连、重启回连失效与启动卡死三大重连核心故障，为后续双模演进建立了可靠的设计基准。
+
+### 修复与优化
+- **首次连接识别修复**: 显式配置 GATT GAP Device Name 和 Appearance。解决设备首次在 Windows 蓝牙列表中显示为 `NIMBLE` 且图标类型错误的底层逻辑缺陷。
+- **冷置 LMP 连接超时修复 (reason=546)**: 运行时强制禁用 Modem Sleep 且在控制器中关闭休眠，避免控制器切换为 150kHz 低精度 RC 时钟导致的连接时隙对齐失败（温飘丢包）。
+- **重启回连失效与 573 闪退修复 (MIC Failure)**: 强制开启非对称密钥分配，保留并声明对端及本端 `ENC_KEY` 的分发标志，解决 Windows 丢弃绑定信息与解密计数器错位闪断问题。
+- **启动无广告修复**: 调整全局 `ble_hs_cfg` 的回调注册时序，防止被 `esp_hid_gap_init` 底层覆盖清空导致广告无广播启动。
+
+---
+
 ## v1.3-stable (2026-05-19)
 
 > GPIO pinout reworked for cleaner wiring and antenna interference avoidance. Dynamic device name. BLE-triggered HFP auto-reconnect retained.

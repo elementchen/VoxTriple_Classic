@@ -1,5 +1,19 @@
 # Version Log
 
+## v2.2-nimble-stable | 2026-06-19
+
+- **Branch**: `test-bt53-coexist`
+- **Commit**: `85c8c05`
+- **特点**: 纯 NimBLE BLE 键盘完美自动秒连版本，解决了配对混淆、时钟温飘断连、重连 573 闪退及启动挂死问题，为后续协议栈重构奠定理论基线。
+
+### 核心优化
+- **GAP描述符更新**: 显式配置 GAP Device Name 和 Appearance (0x03C1)，确保 Windows 首次配对成功显示“键盘”图标。
+- **禁用 Modem Sleep**: 运行时调用 `esp_bt_sleep_disable()` 并硬性禁用控制器休眠，避免 RC 慢速时钟温飘导致冷置 LMP 连接超时 (reason=546)。
+- **密钥分配对齐**: 保持 `ENC_KEY` 分发声明，使 Windows 底层顺利执行 Bonding 密钥持久化，规避重启重连失效问题。
+- **回调挂载时序**: 将 `sync_cb` 挂载移到 `esp_hid_gap_init` 之后，防止被协议栈重置逻辑覆盖导致启动无广告广播。
+
+---
+
 ## v1.7-stable | 2026-05-28
 
 - **Branch**: `master`
