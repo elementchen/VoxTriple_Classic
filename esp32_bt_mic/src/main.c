@@ -92,9 +92,8 @@ void app_main(void)
     ESP_LOGI(TAG, "  Waiting for Bluetooth connections...");
     ESP_LOGI(TAG, "============================================");
 
-    /* Suppress all INFO logs to reduce serial traffic and CPU load.
-     * Only WARN/ERROR will appear. Comment this line to restore debug logs. */
-    esp_log_level_set("*", ESP_LOG_WARN);
+    /* Restore INFO logging for debugging BT stack state and connection event flow. */
+    esp_log_level_set("*", ESP_LOG_INFO);
     esp_log_level_set("BTN_HANDLER", ESP_LOG_DEBUG);
     esp_log_level_set("BLE_GATTS", ESP_LOG_DEBUG);
 

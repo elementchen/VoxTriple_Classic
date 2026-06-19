@@ -10,6 +10,7 @@
 #include <inttypes.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "freertos/timers.h"
 #include "esp_log.h"
 #include "esp_gap_ble_api.h"
 #include "esp_gatts_api.h"
@@ -31,8 +32,16 @@ static const char *TAG = "BLE_GATTS";
 static bool s_connect_event_deferred = false;
 static esp_ble_gatts_cb_param_t s_deferred_connect_param;
 static esp_gatt_if_t s_deferred_gatts_if;
+static TimerHandle_t s_deferred_conn_timer = NULL;
 
-
+static void deferred_conn_timer_cb(TimerHandle_t xTimer)
+{
+    if (s_connect_event_deferred) {
+        s_connect_event_deferred = false;
+        ESP_LOGI(TAG, "[Timer] Deferred connection timer expired. Forcing dispatch GATTS_CONNECT_EVT to esp_hid");
+        esp_hidd_gatts_event_handler(ESP_GATTS_CONNECT_EVT, s_deferred_gatts_if, &s_deferred_connect_param);
+    }
+}
 
 /* ----------------------------------------------------------------
  * Service UUID 0x1820 (Unofficial - used for custom service)
@@ -49,7 +58,7 @@ static esp_gatt_if_t s_deferred_gatts_if;
 #define GATTS_CHAR_BTN4_MAP_UUID   0x2A08
 
 #define GATTS_NUM_HANDLES    24
-#define GATTS_APP_ID         0x01
+#define GATTS_APP_ID         0x02
 #define PREPARE_BUF_MAX_SIZE 1024
 
 extern char g_bt_device_name[];
@@ -266,6 +275,9 @@ static void gap_event_handler(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param
         esp_ble_gap_security_rsp(param->ble_security.ble_req.bd_addr, true);
         break;
     case ESP_GAP_BLE_AUTH_CMPL_EVT:
+        if (s_deferred_conn_timer) {
+            xTimerStop(s_deferred_conn_timer, 0);
+        }
         if (param->ble_security.auth_cmpl.success) {
             ESP_LOGI(TAG, "BLE Authentication success");
             print_bonded_devices("AUTH_CMPL");
@@ -276,7 +288,11 @@ static void gap_event_handler(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param
             }
         } else {
             ESP_LOGE(TAG, "BLE Authentication failed, reason = 0x%x", param->ble_security.auth_cmpl.fail_reason);
-            s_connect_event_deferred = false;
+            if (s_connect_event_deferred) {
+                s_connect_event_deferred = false;
+                ESP_LOGI(TAG, "Authentication failed: dispatching deferred GATTS_CONNECT_EVT to esp_hid anyway");
+                esp_hidd_gatts_event_handler(ESP_GATTS_CONNECT_EVT, s_deferred_gatts_if, &s_deferred_connect_param);
+            }
         }
         break;
     case ESP_GAP_BLE_LOCAL_IR_EVT:
@@ -378,16 +394,34 @@ static void add_characteristic(uint16_t service_handle, uint16_t *char_handle,
 
 static void gatts_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if, esp_ble_gatts_cb_param_t *param)
 {
-    /* Dispatch to HID GATT handler first (only if it's not our custom GATT interface to prevent Unknown gatts_if errors) */
-    if (gatts_if != s_gatts_if || event == ESP_GATTS_REG_EVT) {
+    /* Dispatch to HID GATT handler first (only if it's not our custom GATT interface to prevent Unknown app/gatts_if errors) */
+    bool is_hid_event = false;
+    if (event == ESP_GATTS_REG_EVT) {
+        if (param->reg.app_id != GATTS_APP_ID) {
+            is_hid_event = true;
+        }
+    } else {
+        if (gatts_if != s_gatts_if) {
+            is_hid_event = true;
+        }
+    }
+
+    if (is_hid_event) {
         if (event == ESP_GATTS_CONNECT_EVT) {
             int bond_num = esp_ble_get_bond_device_num();
             if (bond_num > 0) {
-                /* 已绑定设备重连：拦截首次连接事件的分发，防止 esp_hid 主动拉起加密与 Windows 冲突导致闪断 */
+                /* 已绑定设备重连：开启 500ms 定时器延迟分发连接事件，防止从端主动加密与 Windows 冲突，也避免无限拦截导致 Windows 超时闪断 */
                 s_connect_event_deferred = true;
                 s_deferred_gatts_if = gatts_if;
                 memcpy(&s_deferred_connect_param, param, sizeof(esp_ble_gatts_cb_param_t));
-                ESP_LOGI(TAG, "Bonded device reconnecting: deferring GATTS_CONNECT_EVT to esp_hid until authentication success");
+                ESP_LOGI(TAG, "Bonded device reconnecting: deferring GATTS_CONNECT_EVT to esp_hid (timer started for 500ms)");
+                
+                if (s_deferred_conn_timer == NULL) {
+                    s_deferred_conn_timer = xTimerCreate("def_conn_tmr", pdMS_TO_TICKS(500), pdFALSE, NULL, deferred_conn_timer_cb);
+                }
+                if (s_deferred_conn_timer) {
+                    xTimerStart(s_deferred_conn_timer, 0);
+                }
             } else {
                 s_connect_event_deferred = false;
                 esp_hidd_gatts_event_handler(event, gatts_if, param);
