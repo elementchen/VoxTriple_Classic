@@ -121,9 +121,12 @@ static void ble_init_adv_data(const char *name)
     esp_ble_gap_set_security_param(ESP_BLE_SM_AUTHEN_REQ_MODE, &auth_req, 1);
     esp_ble_gap_set_security_param(ESP_BLE_SM_IOCAP_MODE, &iocap, 1);
 
-    /* 配置密钥分发，仅保留 ENC_KEY 以防主从两端映射混淆（不分发 ID_KEY 避免暴露 Identity Address 导致 Windows 侧强制设备合并） */
+    /* 配置非对称密钥分发：
+     * init_key (本端发给对端)：仅分发 ENC_KEY，绝对不分发 ID_KEY 以防主从两端映射混淆（避免暴露 Identity Address 导致 Windows 侧强制设备合并）
+     * rsp_key (对端发给本端)：分发 ENC_KEY | ID_KEY，允许接收并保存 Windows 侧的 IRK 密钥以在重启后解析其 RPA 地址。
+     */
     uint8_t init_key = ESP_BLE_ENC_KEY_MASK;
-    uint8_t rsp_key = ESP_BLE_ENC_KEY_MASK;
+    uint8_t rsp_key = ESP_BLE_ENC_KEY_MASK | ESP_BLE_ID_KEY_MASK;
     uint8_t key_size = 16;
     esp_ble_gap_set_security_param(ESP_BLE_SM_SET_INIT_KEY, &init_key, 1);
     esp_ble_gap_set_security_param(ESP_BLE_SM_SET_RSP_KEY, &rsp_key, 1);
@@ -631,12 +634,14 @@ static void gatts_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_
         ESP_LOGI(TAG, "BLE client connected, conn_id %d", param->connect.conn_id);
         s_conn_id = param->connect.conn_id;
         s_ble_connected = true;
-        /* Request fast connection interval for low-latency keyboard events */
+        /* Request connection interval and latency suitable for dual-mode coexistence.
+         * Set latency to 4, allowing peripheral to skip listener events when idle.
+         * This prevents Controller crash (ASSERT_WARN in lc_task.c) due to RF scheduling conflicts during Classic BT connection. */
         esp_ble_conn_update_params_t conn_params = {0};
         memcpy(conn_params.bda, param->connect.remote_bda, sizeof(esp_bd_addr_t));
         conn_params.min_int = 12;
         conn_params.max_int = 24;
-        conn_params.latency = 0;
+        conn_params.latency = 4;
         conn_params.timeout = 500;
         esp_ble_gap_update_conn_params(&conn_params);
 
