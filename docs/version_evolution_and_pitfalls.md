@@ -26,9 +26,9 @@
 * **先前失败尝试**:
   在 `ble_gatts_config.c` 中通过变量 `s_connect_event_deferred` 拦截已绑定重连的 `GATTS_CONNECT_EVT` 不发给 `esp_hid`，直到 `ESP_GAP_BLE_AUTH_CMPL_EVT` 成功后再补发。
   * **副作用**: 拦截事件导致 Bluedroid 内部的 MTU 交换等基础 GATT/GAP 握手时序不发生，Windows 超时（90ms 左右）直接单方面撕毁连接。
-* **最终消解方案**:
-  - **恢复直通模式**: 彻底移除对 `GATTS_CONNECT_EVT` 的拦截，保持直通直投。
-  - **结合强制关闭休眠与密钥分发**: 运行时调用 `esp_bt_sleep_disable()` 禁用 `Modem Sleep`，保证 RF 射频时钟没有温飘偏置；同时在安全配置里保留双向 `ENC_KEY` 分发声明确保 Windows 成功持久化 Bonding 密钥。此时即使有 `BTM_SetEncryption busy` 提示，协议栈底层能在几百毫秒内自动愈合并成功握手。
+* **最终消解方案 (对称密钥分发 + 拦截延迟分发的协同消解)**:
+  - **对称密钥分发解决 RPA 地址映射 (解决 Device not found)**: 将 `init_key` 和 `rsp_key` 设为对称分发（包含 `ID_KEY`），使两端正确交换 IRK。重启后在系统初始化（GATTS_INIT）时成功从 NVS 加载设备。
+  - **拦截延迟分发解决加密忙死锁 (解决 BTM_SetEncryption busy)**: 对已绑定设备重连（`bond_num > 0`），拦截 `GATTS_CONNECT_EVT` 不分发给官方 `esp_hid`，阻止从端主动拉起加密。直到主端 Windows 顺利拉起加密且触发认证成功（`ESP_GAP_BLE_AUTH_CMPL_EVT`）后，再补发连接事件，彻底消除双向发起加密的并发锁死。
 
 ### 踩坑 3：重连发生 MIC Failure 闪退 (rsn 0x3d) 并伴随 Device not found
 * **故障现象**: ESP32 重启后，Windows 主动发起重连，但在 60ms 内即断连（HCI reason 0x3d / rsn 102），串口显示：
