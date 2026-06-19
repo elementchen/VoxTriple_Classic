@@ -115,6 +115,7 @@ static void bt_stack_up_handler(uint16_t event, void *p_param)
 
     switch (event) {
     case BT_APP_EVT_STACK_UP: {
+#if 0
         /* 提早配置并注册本端 BLE 静态随机地址，确保后 5 字节与物理 MAC 一致以兼容硬件层接收过滤 */
         esp_bd_addr_t ble_mac;
         if (esp_read_mac(ble_mac, ESP_MAC_BT) == ESP_OK) {
@@ -128,6 +129,7 @@ static void bt_stack_up_handler(uint16_t event, void *p_param)
                 ESP_LOGE(TAG, "Set BLE rand address failed: %s", esp_err_to_name(err));
             }
         }
+#endif
 
 #if ENABLE_CLASSIC_BT_MIC
         /* Set device name for Classic BT */

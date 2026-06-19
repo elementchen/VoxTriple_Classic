@@ -101,7 +101,7 @@ static esp_ble_adv_params_t adv_params = {
     .adv_int_min        = 0x060,  /* 60 ms */
     .adv_int_max        = 0x060,
     .adv_type           = ADV_TYPE_IND,
-    .own_addr_type      = BLE_ADDR_TYPE_RANDOM,
+    .own_addr_type      = BLE_ADDR_TYPE_PUBLIC,
     .channel_map        = ADV_CHNL_ALL,
     .adv_filter_policy  = ADV_FILTER_ALLOW_SCAN_ANY_CON_ANY,
 };
@@ -134,9 +134,10 @@ static void ble_init_adv_data(const char *name)
     char ble_name[16];
     esp_bd_addr_t ble_mac;
     if (esp_read_mac(ble_mac, ESP_MAC_BT) == ESP_OK) {
-        ble_mac[0] = 0xC0; // Set highest 2 bits to 11 (Static Random Address)
-        ble_mac[5] ^= 2;   // 暂时异或 2 以修改 MAC 地址，彻底绕过 Windows 对旧 MAC 的绑定缓存锁死进行诊断
-        esp_ble_gap_set_rand_addr(ble_mac);
+        /* 控制变量诊断测试：注释随机地址注册逻辑，直接使用 Public 物理 MAC */
+        /* ble_mac[0] = 0xC0; */
+        /* ble_mac[5] ^= 2;   */
+        /* esp_ble_gap_set_rand_addr(ble_mac); */
         snprintf(ble_name, sizeof(ble_name), "ESP32_KB_%02X", ble_mac[5]);
     } else {
         snprintf(ble_name, sizeof(ble_name), "ESP32_KB");
