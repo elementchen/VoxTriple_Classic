@@ -203,15 +203,30 @@ esp_err_t bt_stack_init(void)
     /* Release Classic BT memory (we don't need BLE-only RAM) */
     /* Note: Don't call mem_release for BTDM dual mode */
 
+#if !ENABLE_CLASSIC_BT_MIC
+    /* 纯 BLE 模式：释放经典蓝牙控制器内存（~30KB），彻底阻止跨传输密钥派生。
+     * BTDM 模式下 SC 配对会自动派生 Classic BT link key，导致 DevType 存为 DUMO，
+     * 重启后 btc_storage_load_bonded_ble_devices() 无法正确加载 → "Device not found"。
+     * 纯 BLE 控制器模式与 NimBLE 稳定版行为一致，密钥持久化可靠。 */
+    ESP_ERROR_CHECK(esp_bt_controller_mem_release(ESP_BT_MODE_CLASSIC_BT));
+#endif
+
     /* Initialize BT controller */
     esp_bt_controller_config_t bt_cfg = BT_CONTROLLER_INIT_CONFIG_DEFAULT();
+#if !ENABLE_CLASSIC_BT_MIC
+    bt_cfg.mode = ESP_BT_MODE_BLE;  /* 覆盖 sdkconfig 的 BTDM 默认值 */
+#endif
     ret = esp_bt_controller_init(&bt_cfg);
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "%s initialize controller failed: %s", __func__, esp_err_to_name(ret));
         return ret;
     }
 
+#if ENABLE_CLASSIC_BT_MIC
     ret = esp_bt_controller_enable(ESP_BT_MODE_BTDM);
+#else
+    ret = esp_bt_controller_enable(ESP_BT_MODE_BLE);
+#endif
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "%s enable controller failed: %s", __func__, esp_err_to_name(ret));
         return ret;
@@ -241,9 +256,10 @@ esp_err_t bt_stack_init(void)
         snprintf(g_bt_device_name, sizeof(g_bt_device_name),
                  "ESP32_MIC_%02X", addr[5]);
     }
-#endif
-
     ESP_LOGI(TAG, "Bluetooth controller mode: BTDM (dual mode)");
+#else
+    ESP_LOGI(TAG, "Bluetooth controller mode: BLE only");
+#endif
 
     /* Start BT application task */
     bt_app_task_start_up();
