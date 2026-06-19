@@ -106,7 +106,7 @@ static void ble_init_adv_data(const char *name)
     esp_bd_addr_t ble_mac;
     if (esp_read_mac(ble_mac, ESP_MAC_BT) == ESP_OK) {
         ble_mac[0] = 0xC0; // Set highest 2 bits to 11 (Static Random Address)
-        // 保持后 5 字节与真实 Public MAC 完全一致，确保 ESP32 底层 Controller 射频地址过滤器兼容，防止闪断
+        ble_mac[5] ^= 2;   // 暂时异或 2 以修改 MAC 地址，彻底绕过 Windows 对旧 MAC 的绑定缓存锁死进行诊断
         esp_ble_gap_set_rand_addr(ble_mac);
         snprintf(ble_name, sizeof(ble_name), "ESP32_KB_%02X", ble_mac[5]);
     } else {
