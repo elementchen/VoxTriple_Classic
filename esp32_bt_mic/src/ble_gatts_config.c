@@ -636,6 +636,7 @@ static void gatts_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_
         /* Request connection interval and latency suitable for dual-mode coexistence.
          * Set latency to 4, allowing peripheral to skip listener events when idle.
          * This prevents Controller crash (ASSERT_WARN in lc_task.c) due to RF scheduling conflicts during Classic BT connection. */
+        /*
         esp_ble_conn_update_params_t conn_params = {0};
         memcpy(conn_params.bda, param->connect.remote_bda, sizeof(esp_bd_addr_t));
         conn_params.min_int = 12;
@@ -643,6 +644,7 @@ static void gatts_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_
         conn_params.latency = 4;
         conn_params.timeout = 500;
         esp_ble_gap_update_conn_params(&conn_params);
+        */
 
         break;
     }
