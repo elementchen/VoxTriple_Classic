@@ -18,6 +18,7 @@
 #include "esp_gatt_common_api.h"
 #include "esp_bt.h"
 #include "esp_hidd.h"
+#include "esp_mac.h"
 #include "ble_gatts_config.h"
 #include "config_storage.h"
 #include "bt_init.h"
@@ -92,7 +93,7 @@ static esp_ble_adv_params_t adv_params = {
     .adv_int_min        = 0x060,  /* 60 ms */
     .adv_int_max        = 0x060,
     .adv_type           = ADV_TYPE_IND,
-    .own_addr_type      = BLE_ADDR_TYPE_PUBLIC,
+    .own_addr_type      = BLE_ADDR_TYPE_RANDOM,
     .channel_map        = ADV_CHNL_ALL,
     .adv_filter_policy  = ADV_FILTER_ALLOW_SCAN_ANY_CON_ANY,
 };
@@ -101,9 +102,14 @@ static void ble_init_adv_data(const char *name)
 {
     /* BLE GAP device name — shorter for advertising budget */
     char ble_name[16];
-    const uint8_t *mac = esp_bt_dev_get_address();
-    if (mac) {
-        snprintf(ble_name, sizeof(ble_name), "ESP32_KB_%02X", mac[5]);
+    esp_bd_addr_t ble_mac;
+    if (esp_read_mac(ble_mac, ESP_MAC_BT) == ESP_OK) {
+        ble_mac[0] |= 0xC0; // Set highest 2 bits to 11 to satisfy Static Random Address specification (0xC0-0xFF)
+        ble_mac[5] ^= 1;    // Modify least significant byte to differ from Classic BT MAC
+        
+        /* 已经在 bt_init.c 中提早设置了地址，这里再次确认设置 */
+        esp_ble_gap_set_rand_addr(ble_mac);
+        snprintf(ble_name, sizeof(ble_name), "ESP32_KB_%02X", ble_mac[5]);
     } else {
         snprintf(ble_name, sizeof(ble_name), "ESP32_KB");
     }
@@ -114,6 +120,14 @@ static void ble_init_adv_data(const char *name)
     esp_ble_io_cap_t iocap = ESP_IO_CAP_NONE;
     esp_ble_gap_set_security_param(ESP_BLE_SM_AUTHEN_REQ_MODE, &auth_req, 1);
     esp_ble_gap_set_security_param(ESP_BLE_SM_IOCAP_MODE, &iocap, 1);
+
+    /* 配置密钥分发，仅保留 ENC_KEY 以防主从两端映射混淆（不分发 ID_KEY 避免暴露 Identity Address 导致 Windows 侧强制设备合并） */
+    uint8_t init_key = ESP_BLE_ENC_KEY_MASK;
+    uint8_t rsp_key = ESP_BLE_ENC_KEY_MASK;
+    uint8_t key_size = 16;
+    esp_ble_gap_set_security_param(ESP_BLE_SM_SET_INIT_KEY, &init_key, 1);
+    esp_ble_gap_set_security_param(ESP_BLE_SM_SET_RSP_KEY, &rsp_key, 1);
+    esp_ble_gap_set_security_param(ESP_BLE_SM_MAX_KEY_SIZE, &key_size, 1);
 
     /* 128-bit HID service UUID for advertising */
     const uint8_t hid_uuid128[] = {
@@ -180,12 +194,17 @@ static void gap_event_handler(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param
     switch (event) {
     case ESP_GAP_BLE_ADV_DATA_RAW_SET_COMPLETE_EVT:
         break;
-    case ESP_GAP_BLE_SCAN_RSP_DATA_RAW_SET_COMPLETE_EVT:
-        /* Start BLE advertising immediately. Both BLE keyboard and
-         * Classic BT HFP are available simultaneously. BTDM security
-         * conflicts are handled by auto-retry on disconnect. */
-        esp_ble_gap_start_advertising(&adv_params);
+    case ESP_GAP_BLE_SCAN_RSP_DATA_RAW_SET_COMPLETE_EVT: {
+        /* 为了避开经典蓝牙首次自动重连的 Controller 冲突，将首次 BLE 广播启动延迟 5 秒 */
+        ESP_LOGI(TAG, "Scan response data complete. Deferring initial advertising by 5 seconds...");
+        TimerHandle_t t = xTimerCreate("first_adv", pdMS_TO_TICKS(5000), pdFALSE, NULL, adv_retry_cb);
+        if (t) {
+            xTimerStart(t, 0);
+        } else {
+            esp_ble_gap_start_advertising(&adv_params);
+        }
         break;
+    }
     case ESP_GAP_BLE_ADV_START_COMPLETE_EVT:
         if (param->adv_start_cmpl.status != ESP_BT_STATUS_SUCCESS) {
             ESP_LOGE(TAG, "Advertising start failed");
@@ -208,6 +227,17 @@ static void gap_event_handler(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param
                  param->update_conn_params.timeout);
         break;
 
+    case ESP_GAP_BLE_SEC_REQ_EVT:
+        /* Response to security requests from the peer device */
+        esp_ble_gap_security_rsp(param->ble_security.ble_req.bd_addr, true);
+        break;
+    case ESP_GAP_BLE_AUTH_CMPL_EVT:
+        if (param->ble_security.auth_cmpl.success) {
+            ESP_LOGI(TAG, "BLE Authentication success");
+        } else {
+            ESP_LOGE(TAG, "BLE Authentication failed, reason = 0x%x", param->ble_security.auth_cmpl.fail_reason);
+        }
+        break;
     case ESP_GAP_BLE_LOCAL_IR_EVT:
     case ESP_GAP_BLE_LOCAL_ER_EVT:
         break;
@@ -307,8 +337,10 @@ static void add_characteristic(uint16_t service_handle, uint16_t *char_handle,
 
 static void gatts_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if, esp_ble_gatts_cb_param_t *param)
 {
-    /* Dispatch to HID GATT handler first (for keyboard events) */
-    esp_hidd_gatts_event_handler(event, gatts_if, param);
+    /* Dispatch to HID GATT handler first (only if it's not our custom GATT interface to prevent Unknown gatts_if errors) */
+    if (gatts_if != s_gatts_if || event == ESP_GATTS_REG_EVT) {
+        esp_hidd_gatts_event_handler(event, gatts_if, param);
+    }
 
     switch (event) {
     case ESP_GATTS_REG_EVT: {
@@ -319,7 +351,6 @@ static void gatts_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_
             ESP_LOGE(TAG, "Reg app failed, app_id %04x, status %d", param->reg.app_id, param->reg.status);
             return;
         }
-        esp_ble_gap_config_local_privacy(true);
         ble_init_adv_data(g_bt_device_name);
 
         /* Create service */
@@ -460,6 +491,7 @@ static void gatts_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_
     }
 
     case ESP_GATTS_READ_EVT: {
+        if (gatts_if != s_gatts_if) break;
         ESP_LOGI(TAG, "GATT_READ_EVT, conn_id %d, trans_id %" PRIu32 ", handle %d",
                  param->read.conn_id, param->read.trans_id, param->read.handle);
 
@@ -499,6 +531,7 @@ static void gatts_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_
     }
 
     case ESP_GATTS_WRITE_EVT: {
+        if (gatts_if != s_gatts_if) break;
         ESP_LOGI(TAG, "GATT_WRITE_EVT, conn_id %d, trans_id %" PRIu32 ", handle %d",
                  param->write.conn_id, param->write.trans_id, param->write.handle);
 
@@ -581,6 +614,7 @@ static void gatts_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_
     }
 
     case ESP_GATTS_EXEC_WRITE_EVT: {
+        if (gatts_if != s_gatts_if) break;
         esp_ble_gatts_send_response(gatts_if, param->write.conn_id, param->write.trans_id, ESP_GATT_OK, NULL);
         exec_write_event_env(&s_prepare_write_env, param);
         break;
@@ -606,18 +640,6 @@ static void gatts_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_
         conn_params.timeout = 500;
         esp_ble_gap_update_conn_params(&conn_params);
 
-        /* Keep advertising so the Python config app can also connect */
-        esp_ble_gap_start_advertising(&adv_params);
-
-        if (!bt_hfp_is_connected()) {
-            esp_bd_addr_t saved_addr = {0};
-            if (config_storage_load_hfp_addr(saved_addr) == ESP_OK) {
-                ESP_LOGI(TAG, "Triggering HFP reconnect to %02x:%02x:%02x:%02x:%02x:%02x",
-                         saved_addr[0], saved_addr[1], saved_addr[2],
-                         saved_addr[3], saved_addr[4], saved_addr[5]);
-                esp_hf_client_connect(saved_addr);
-            }
-        }
         break;
     }
 
@@ -628,6 +650,9 @@ static void gatts_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_
         s_ble_connected = false;
         s_conn_id = 0;
 
+        /* BLE 断开时，停用经典蓝牙（隐藏广播并断开连接） */
+        bt_classic_deactivate();
+
         /* Aggressive retry: first disconnect → immediate restart.
          * If it fails again quickly (BTDM conflict), back off to 3s. */
         static uint32_t last_disc_ms = 0;
@@ -635,9 +660,13 @@ static void gatts_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_
         uint32_t delay_ms = (now_ms - last_disc_ms < 30000) ? 3000 : 0;
         last_disc_ms = now_ms;
 
-        TimerHandle_t t = xTimerCreate("adv_retry", pdMS_TO_TICKS(delay_ms),
-                                       pdFALSE, NULL, adv_retry_cb);
-        if (t) xTimerStart(t, 0);
+        if (delay_ms == 0) {
+            esp_ble_gap_start_advertising(&adv_params);
+        } else {
+            TimerHandle_t t = xTimerCreate("adv_retry", pdMS_TO_TICKS(delay_ms),
+                                           pdFALSE, NULL, adv_retry_cb);
+            if (t) xTimerStart(t, 0);
+        }
         break;
     }
 

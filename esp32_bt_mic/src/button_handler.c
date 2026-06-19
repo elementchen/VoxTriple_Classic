@@ -105,19 +105,13 @@ static void button_task_func(void *arg)
                     /* Reset inactivity deep sleep timer */
                     if (s_inactivity_timer) xTimerReset(s_inactivity_timer, 0);
 
-                    /* Wake HFP ACL from sniff to reduce SCO open latency */
-                    bt_hfp_hf_wake_acl();
-
-                    /* Connection wake-up: if HFP or HID is disconnected,
-                     * pressing any button triggers reconnection. */
-                    if (!bt_hfp_is_connected()) {
-                        esp_bd_addr_t saved_addr = {0};
-                        if (config_storage_load_hfp_addr(saved_addr) == ESP_OK) {
-                            esp_hf_client_connect(saved_addr);
-                        }
-                    }
+                    /* Connection wake-up: if BLE is not connected, trigger advertising to connect keyboard.
+                     * If BLE is already connected, activate Classic BT HFP (on key press) to connect microphone. */
                     if (!ble_hid_is_connected()) {
                         ble_gatts_adv_start();
+                    } else {
+                        bt_classic_activate();
+                        bt_hfp_hf_wake_acl();
                     }
 
                     /* Indicator LED on Button 1 press — only if BLE is connected */

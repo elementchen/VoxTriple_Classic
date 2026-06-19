@@ -18,6 +18,8 @@
 #include "esp_bt_device.h"
 #include "esp_gap_bt_api.h"
 #include "esp_hf_client_api.h"
+#include "esp_gap_ble_api.h"
+#include "esp_mac.h"
 #include "bt_init.h"
 #include "bt_app_core.h"
 #include "bt_app_hf.h"
@@ -112,6 +114,20 @@ static void bt_stack_up_handler(uint16_t event, void *p_param)
 
     switch (event) {
     case BT_APP_EVT_STACK_UP: {
+        /* 提早配置并注册本端 BLE 静态随机地址，确保 NVS 安全绑定密钥在 App 注册前能正确关联加载 */
+        esp_bd_addr_t ble_mac;
+        if (esp_read_mac(ble_mac, ESP_MAC_BT) == ESP_OK) {
+            ble_mac[0] |= 0xC0; // 符合静态随机地址规范
+            ble_mac[5] ^= 1;    // 区分经典蓝牙 MAC
+            esp_err_t err = esp_ble_gap_set_rand_addr(ble_mac);
+            if (err == ESP_OK) {
+                ESP_LOGI(TAG, "BLE Static Random MAC set to %02X:%02X:%02X:%02X:%02X:%02X",
+                         ble_mac[0], ble_mac[1], ble_mac[2], ble_mac[3], ble_mac[4], ble_mac[5]);
+            } else {
+                ESP_LOGE(TAG, "Set BLE rand address failed: %s", esp_err_to_name(err));
+            }
+        }
+
         /* Set device name for Classic BT */
         esp_bt_gap_set_device_name(g_bt_device_name);
 
@@ -151,18 +167,10 @@ static void bt_stack_up_handler(uint16_t event, void *p_param)
         esp_bredr_tx_power_set((esp_power_level_t)tx_power_level, (esp_power_level_t)tx_power_level);
         ESP_LOGI(TAG, "Classic BT TX power set to level %d", tx_power_level);
 
-        /* Set discoverable and connectable */
-        esp_bt_gap_set_scan_mode(ESP_BT_CONNECTABLE, ESP_BT_GENERAL_DISCOVERABLE);
+        /* Set classic BT non-discoverable and non-connectable initially */
+        esp_bt_gap_set_scan_mode(ESP_BT_NON_CONNECTABLE, ESP_BT_NON_DISCOVERABLE);
 
-        ESP_LOGI(TAG, "BT stack initialized, name: %s", g_bt_device_name);
-
-        /* Auto-connect HFP to last paired device after stack stabilizes */
-        vTaskDelay(pdMS_TO_TICKS(2000));
-        esp_bd_addr_t saved_addr = {0};
-        if (config_storage_load_hfp_addr(saved_addr) == ESP_OK) {
-            ESP_LOGI(TAG, "Auto-connecting HFP to saved peer...");
-            esp_hf_client_connect(saved_addr);
-        }
+        ESP_LOGI(TAG, "BT stack initialized, name: %s (Classic BT hidden initially)", g_bt_device_name);
         break;
     }
     default:
@@ -216,6 +224,9 @@ esp_err_t bt_stack_init(void)
         return ret;
     }
 
+    /* 立即同步设置经典蓝牙为不可被搜索和连接，防止在初始化期间泄露广播 */
+    esp_bt_gap_set_scan_mode(ESP_BT_NON_CONNECTABLE, ESP_BT_NON_DISCOVERABLE);
+
     /* Classic BT HFP device name (microphone/headset audio) */
     const uint8_t *addr = esp_bt_dev_get_address();
     if (addr) {
@@ -232,4 +243,34 @@ esp_err_t bt_stack_init(void)
     bt_app_work_dispatch(bt_stack_up_handler, BT_APP_EVT_STACK_UP, NULL, 0, NULL);
 
     return ESP_OK;
+}
+
+static bool s_classic_bt_activated = false;
+
+void bt_classic_activate(void)
+{
+    if (s_classic_bt_activated) return;
+    s_classic_bt_activated = true;
+    ESP_LOGI(TAG, "Activating Classic BT HFP (making discoverable/connectable)...");
+    esp_bt_gap_set_scan_mode(ESP_BT_CONNECTABLE, ESP_BT_GENERAL_DISCOVERABLE);
+
+    esp_bd_addr_t saved_addr = {0};
+    if (config_storage_load_hfp_addr(saved_addr) == ESP_OK) {
+        ESP_LOGI(TAG, "Triggering classic BT HFP reconnect to saved peer...");
+        esp_hf_client_connect(saved_addr);
+    }
+}
+
+void bt_classic_deactivate(void)
+{
+    if (!s_classic_bt_activated) return;
+    s_classic_bt_activated = false;
+    ESP_LOGI(TAG, "Deactivating Classic BT HFP (making non-discoverable/non-connectable)...");
+    esp_bt_gap_set_scan_mode(ESP_BT_NON_CONNECTABLE, ESP_BT_NON_DISCOVERABLE);
+
+    if (bt_hfp_is_connected()) {
+        extern esp_bd_addr_t hf_peer_addr;
+        ESP_LOGI(TAG, "Disconnecting active classic BT HFP connection...");
+        esp_hf_client_disconnect(hf_peer_addr);
+    }
 }

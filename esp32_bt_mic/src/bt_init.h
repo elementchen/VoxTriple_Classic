@@ -50,4 +50,14 @@ void bt_audio_set_active(bool active);
  */
 void bt_hfp_hf_wake_acl(void);
 
+/**
+ * @brief Activate Classic BT HFP (make discoverable/connectable, trigger auto-connect)
+ */
+void bt_classic_activate(void);
+
+/**
+ * @brief Deactivate Classic BT HFP (make non-discoverable/non-connectable, disconnect if connected)
+ */
+void bt_classic_deactivate(void);
+
 #endif /* __BT_INIT_H__ */

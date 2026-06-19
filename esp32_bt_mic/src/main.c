@@ -58,16 +58,9 @@ void app_main(void)
     ESP_LOGI(TAG, "Step 4: Initializing Bluetooth stack...");
     ESP_ERROR_CHECK(bt_stack_init());
 
-    /* Load and apply saved BT sleep mode setting.
-     * Default to enabled for new devices. */
-    uint8_t sleep_mode = 1;
-    if (config_storage_load_sleep_mode(&sleep_mode) == ESP_OK && sleep_mode) {
-        esp_bt_sleep_enable();
-        ESP_LOGI(TAG, "BT sleep mode enabled");
-    } else {
-        esp_bt_sleep_disable();
-        ESP_LOGI(TAG, "BT sleep mode disabled");
-    }
+    /* Force disable BT sleep mode (Modem Sleep) in runtime to prevent connection timeouts (reason 546) and MIC failures */
+    esp_bt_sleep_disable();
+    ESP_LOGI(TAG, "BT sleep mode disabled by force");
 
     /* Disable WiFi to save power — we only use Bluetooth */
     esp_err_t wifi_ret = esp_wifi_stop();
