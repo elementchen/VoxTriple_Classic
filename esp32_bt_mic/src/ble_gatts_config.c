@@ -27,10 +27,7 @@
 
 static const char *TAG = "BLE_GATTS";
 
-/* 用于已绑定设备重连时的连接事件延迟分发，防止 esp_hid 与 Windows 加密冲突 */
-static bool s_connect_event_deferred = false;
-static esp_ble_gatts_cb_param_t s_deferred_connect_param;
-static esp_gatt_if_t s_deferred_gatts_if;
+
 
 /* ----------------------------------------------------------------
  * Service UUID 0x1820 (Unofficial - used for custom service)
@@ -118,6 +115,7 @@ static void ble_init_adv_data(const char *name)
         snprintf(ble_name, sizeof(ble_name), "ESP32_KB");
     }
     esp_ble_gap_set_device_name(ble_name);
+    esp_ble_gap_config_local_icon(0x03C1); // 显式设置 GAP Appearance 为 HID Keyboard，确保首次配对图标正确
 
     /* BLE SMP — Secure Connections bonding, no I/O capability. */
     esp_ble_auth_req_t auth_req = ESP_LE_AUTH_REQ_SC_BOND;
@@ -241,14 +239,8 @@ static void gap_event_handler(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param
     case ESP_GAP_BLE_AUTH_CMPL_EVT:
         if (param->ble_security.auth_cmpl.success) {
             ESP_LOGI(TAG, "BLE Authentication success");
-            if (s_connect_event_deferred) {
-                s_connect_event_deferred = false;
-                ESP_LOGI(TAG, "Authentication successful: dispatching deferred GATTS_CONNECT_EVT to esp_hid");
-                esp_hidd_gatts_event_handler(ESP_GATTS_CONNECT_EVT, s_deferred_gatts_if, &s_deferred_connect_param);
-            }
         } else {
             ESP_LOGE(TAG, "BLE Authentication failed, reason = 0x%x", param->ble_security.auth_cmpl.fail_reason);
-            s_connect_event_deferred = false;
         }
         break;
     case ESP_GAP_BLE_LOCAL_IR_EVT:
@@ -352,21 +344,7 @@ static void gatts_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_
 {
     /* Dispatch to HID GATT handler first (only if it's not our custom GATT interface to prevent Unknown gatts_if errors) */
     if (gatts_if != s_gatts_if || event == ESP_GATTS_REG_EVT) {
-        if (event == ESP_GATTS_CONNECT_EVT) {
-            int bond_num = esp_ble_get_bond_device_num();
-            if (bond_num > 0) {
-                /* 已绑定设备重连：拦截首次连接事件的分发，防止 esp_hid 主动拉起加密与 Windows 冲突导致闪断 */
-                s_connect_event_deferred = true;
-                s_deferred_gatts_if = gatts_if;
-                memcpy(&s_deferred_connect_param, param, sizeof(esp_ble_gatts_cb_param_t));
-                ESP_LOGI(TAG, "Bonded device reconnecting: deferring GATTS_CONNECT_EVT to esp_hid until authentication success");
-            } else {
-                s_connect_event_deferred = false;
-                esp_hidd_gatts_event_handler(event, gatts_if, param);
-            }
-        } else {
-            esp_hidd_gatts_event_handler(event, gatts_if, param);
-        }
+        esp_hidd_gatts_event_handler(event, gatts_if, param);
     }
 
     switch (event) {
