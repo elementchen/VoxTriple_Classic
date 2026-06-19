@@ -120,6 +120,17 @@ static void ble_init_adv_data(const char *name)
     esp_ble_gap_set_security_param(ESP_BLE_SM_AUTHEN_REQ_MODE, &auth_req, 1);
     esp_ble_gap_set_security_param(ESP_BLE_SM_IOCAP_MODE, &iocap, 1);
 
+    /* 配置非对称密钥分发：
+     * init_key (本端发给对端)：仅分发 ENC_KEY，绝对不分发 ID_KEY 以防主从两端映射混淆（避免暴露 Identity Address 导致 Windows 侧强制设备合并）
+     * rsp_key (对端发给本端)：分发 ENC_KEY | ESP_BLE_ID_KEY_MASK，允许接收并保存 Windows 侧的 IRK 密钥以在重启后解析其 RPA 地址。
+     */
+    uint8_t init_key = ESP_BLE_ENC_KEY_MASK;
+    uint8_t rsp_key = ESP_BLE_ENC_KEY_MASK | ESP_BLE_ID_KEY_MASK;
+    uint8_t key_size = 16;
+    esp_ble_gap_set_security_param(ESP_BLE_SM_SET_INIT_KEY, &init_key, 1);
+    esp_ble_gap_set_security_param(ESP_BLE_SM_SET_RSP_KEY, &rsp_key, 1);
+    esp_ble_gap_set_security_param(ESP_BLE_SM_MAX_KEY_SIZE, &key_size, 1);
+
     /* 128-bit HID service UUID for advertising */
     const uint8_t hid_uuid128[] = {
         0xFB, 0x34, 0x9B, 0x5F, 0x80, 0x00, 0x00, 0x80,
