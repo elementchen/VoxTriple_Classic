@@ -115,11 +115,11 @@ static void bt_stack_up_handler(uint16_t event, void *p_param)
 
     switch (event) {
     case BT_APP_EVT_STACK_UP: {
-        /* 提早配置并注册本端 BLE 静态随机地址，确保 NVS 安全绑定密钥在 App 注册前能正确关联加载 */
+        /* 提早配置并注册本端 BLE 静态随机地址，确保后 5 字节与物理 MAC 一致以兼容硬件层接收过滤 */
         esp_bd_addr_t ble_mac;
         if (esp_read_mac(ble_mac, ESP_MAC_BT) == ESP_OK) {
-            ble_mac[0] |= 0xC0; // 符合静态随机地址规范
-            ble_mac[5] ^= 1;    // 区分经典蓝牙 MAC
+            ble_mac[0] = 0xC0; // 符合静态随机地址规范（最高两位为 11）
+            // 去除最低字节异或 1 的操作，保持后 5 字节对齐以防止硬件层丢包闪断
             esp_err_t err = esp_ble_gap_set_rand_addr(ble_mac);
             if (err == ESP_OK) {
                 ESP_LOGI(TAG, "BLE Static Random MAC set to %02X:%02X:%02X:%02X:%02X:%02X",

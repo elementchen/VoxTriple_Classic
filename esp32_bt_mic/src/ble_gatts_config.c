@@ -105,10 +105,8 @@ static void ble_init_adv_data(const char *name)
     char ble_name[16];
     esp_bd_addr_t ble_mac;
     if (esp_read_mac(ble_mac, ESP_MAC_BT) == ESP_OK) {
-        ble_mac[0] |= 0xC0; // Set highest 2 bits to 11 to satisfy Static Random Address specification (0xC0-0xFF)
-        ble_mac[5] ^= 1;    // Modify least significant byte to differ from Classic BT MAC
-        
-        /* 已经在 bt_init.c 中提早设置了地址，这里再次确认设置 */
+        ble_mac[0] = 0xC0; // Set highest 2 bits to 11 (Static Random Address)
+        // 保持后 5 字节与真实 Public MAC 完全一致，确保 ESP32 底层 Controller 射频地址过滤器兼容，防止闪断
         esp_ble_gap_set_rand_addr(ble_mac);
         snprintf(ble_name, sizeof(ble_name), "ESP32_KB_%02X", ble_mac[5]);
     } else {
@@ -121,17 +119,6 @@ static void ble_init_adv_data(const char *name)
     esp_ble_io_cap_t iocap = ESP_IO_CAP_NONE;
     esp_ble_gap_set_security_param(ESP_BLE_SM_AUTHEN_REQ_MODE, &auth_req, 1);
     esp_ble_gap_set_security_param(ESP_BLE_SM_IOCAP_MODE, &iocap, 1);
-
-    /* 配置非对称密钥分发：
-     * init_key (本端发给对端)：仅分发 ENC_KEY，绝对不分发 ID_KEY 以防主从两端映射混淆（避免暴露 Identity Address 导致 Windows 侧强制设备合并）
-     * rsp_key (对端发给本端)：分发 ENC_KEY | ID_KEY，允许接收并保存 Windows 侧的 IRK 密钥以在重启后解析其 RPA 地址。
-     */
-    uint8_t init_key = ESP_BLE_ENC_KEY_MASK;
-    uint8_t rsp_key = ESP_BLE_ENC_KEY_MASK | ESP_BLE_ID_KEY_MASK;
-    uint8_t key_size = 16;
-    esp_ble_gap_set_security_param(ESP_BLE_SM_SET_INIT_KEY, &init_key, 1);
-    esp_ble_gap_set_security_param(ESP_BLE_SM_SET_RSP_KEY, &rsp_key, 1);
-    esp_ble_gap_set_security_param(ESP_BLE_SM_MAX_KEY_SIZE, &key_size, 1);
 
     /* 128-bit HID service UUID for advertising */
     const uint8_t hid_uuid128[] = {
