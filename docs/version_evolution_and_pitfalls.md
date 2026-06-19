@@ -30,6 +30,19 @@
   - **恢复直通模式**: 彻底移除对 `GATTS_CONNECT_EVT` 的拦截，保持直通直投。
   - **结合强制关闭休眠与密钥分发**: 运行时调用 `esp_bt_sleep_disable()` 禁用 `Modem Sleep`，保证 RF 射频时钟没有温飘偏置；同时在安全配置里保留双向 `ENC_KEY` 分发声明确保 Windows 成功持久化 Bonding 密钥。此时即使有 `BTM_SetEncryption busy` 提示，协议栈底层能在几百毫秒内自动愈合并成功握手。
 
+### 踩坑 3：重连发生 MIC Failure 闪退 (rsn 0x3d) 并伴随 Device not found
+* **故障现象**: ESP32 重启后，Windows 主动发起重连，但在 60ms 内即断连（HCI reason 0x3d / rsn 102），串口显示：
+  `W (12131) BT_APPL: bta_dm_ble_smp_cback remove bond,rsn 102, BDA:0xF44EFC143CA7`
+  `E (12131) BT_BTM: Device not found`
+* **原因分析**:
+  配对时本端 `init_key` 仅分发了 `ENC_KEY`，没有分发 `ID_KEY`，导致 Windows 亦未能与本端交换并保存 `IRK` (Identity Resolving Key) 密钥。当 Windows 重启以 RPA (可解析随机地址) 重连时，由于缺乏本端及对端的身份映射，ESP32 判定该设备未曾配对（Device not found），无法获取其 LTK 密钥进行解密，进而触发 MIC Failure 断开。
+* **消解方案**:
+  在安全参数中将 `init_key` 和 `rsp_key` 设为对称分发模式，允许双方完整交互 `ID_KEY` (IRK 密钥及身份地址)：
+  ```c
+  uint8_t init_key = ESP_BLE_ENC_KEY_MASK | ESP_BLE_ID_KEY_MASK;
+  uint8_t rsp_key = ESP_BLE_ENC_KEY_MASK | ESP_BLE_ID_KEY_MASK;
+  ```
+
 ---
 
 ## [v2.2-nimble-stable] 纯 NimBLE BLE 键盘稳定里程碑 | 2026-06-19

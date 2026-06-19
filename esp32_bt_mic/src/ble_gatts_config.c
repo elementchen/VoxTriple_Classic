@@ -123,11 +123,12 @@ static void ble_init_adv_data(const char *name)
     esp_ble_gap_set_security_param(ESP_BLE_SM_AUTHEN_REQ_MODE, &auth_req, 1);
     esp_ble_gap_set_security_param(ESP_BLE_SM_IOCAP_MODE, &iocap, 1);
 
-    /* 配置非对称密钥分发：
-     * init_key (本端发给对端)：仅分发 ENC_KEY，绝对不分发 ID_KEY 以防主从两端映射混淆（避免暴露 Identity Address 导致 Windows 侧强制设备合并）
-     * rsp_key (对端发给本端)：分发 ENC_KEY | ESP_BLE_ID_KEY_MASK，允许接收并保存 Windows 侧的 IRK 密钥以在重启后解析其 RPA 地址。
+    /* 配置对称密钥分发：
+     * 为了在重启后能成功解析 Windows 使用的 RPA (随机私有地址)，
+     * 我们必须双向都交换并分发 ENC_KEY (LTK) 和 ID_KEY (IRK/Identity Address)。
+     * 否则重连时底层会报 Device not found 进而发生 MIC Failure 闪退断连 (rsn 0x3d / rsn 102)。
      */
-    uint8_t init_key = ESP_BLE_ENC_KEY_MASK;
+    uint8_t init_key = ESP_BLE_ENC_KEY_MASK | ESP_BLE_ID_KEY_MASK;
     uint8_t rsp_key = ESP_BLE_ENC_KEY_MASK | ESP_BLE_ID_KEY_MASK;
     uint8_t key_size = 16;
     esp_ble_gap_set_security_param(ESP_BLE_SM_SET_INIT_KEY, &init_key, 1);
