@@ -200,33 +200,19 @@ esp_err_t bt_stack_init(void)
 {
     esp_err_t ret;
 
-    /* Release Classic BT memory (we don't need BLE-only RAM) */
-    /* Note: Don't call mem_release for BTDM dual mode */
+    /* Release BLE controller memory to save RAM (~30KB) and strictly enforce BR/EDR-only mode */
+    ESP_ERROR_CHECK(esp_bt_controller_mem_release(ESP_BT_MODE_BLE));
 
-#if !ENABLE_CLASSIC_BT_MIC
-    /* 纯 BLE 模式：释放经典蓝牙控制器内存（~30KB），彻底阻止跨传输密钥派生。
-     * BTDM 模式下 SC 配对会自动派生 Classic BT link key，导致 DevType 存为 DUMO，
-     * 重启后 btc_storage_load_bonded_ble_devices() 无法正确加载 → "Device not found"。
-     * 纯 BLE 控制器模式与 NimBLE 稳定版行为一致，密钥持久化可靠。 */
-    ESP_ERROR_CHECK(esp_bt_controller_mem_release(ESP_BT_MODE_CLASSIC_BT));
-#endif
-
-    /* Initialize BT controller */
+    /* Initialize BT controller in BR/EDR-only mode */
     esp_bt_controller_config_t bt_cfg = BT_CONTROLLER_INIT_CONFIG_DEFAULT();
-#if !ENABLE_CLASSIC_BT_MIC
-    bt_cfg.mode = ESP_BT_MODE_BLE;  /* 覆盖 sdkconfig 的 BTDM 默认值 */
-#endif
+    bt_cfg.mode = ESP_BT_MODE_CLASSIC_BT;
     ret = esp_bt_controller_init(&bt_cfg);
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "%s initialize controller failed: %s", __func__, esp_err_to_name(ret));
         return ret;
     }
 
-#if ENABLE_CLASSIC_BT_MIC
-    ret = esp_bt_controller_enable(ESP_BT_MODE_BTDM);
-#else
-    ret = esp_bt_controller_enable(ESP_BT_MODE_BLE);
-#endif
+    ret = esp_bt_controller_enable(ESP_BT_MODE_CLASSIC_BT);
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "%s enable controller failed: %s", __func__, esp_err_to_name(ret));
         return ret;
@@ -246,20 +232,16 @@ esp_err_t bt_stack_init(void)
         return ret;
     }
 
-#if ENABLE_CLASSIC_BT_MIC
-    /* 立即同步设置经典蓝牙为不可被搜索和连接，防止在初始化期间泄露广播 */
-    esp_bt_gap_set_scan_mode(ESP_BT_NON_CONNECTABLE, ESP_BT_NON_DISCOVERABLE);
+    /* Set scan mode to connectable & discoverable initially so Windows can find/reconnect classic BT */
+    esp_bt_gap_set_scan_mode(ESP_BT_CONNECTABLE, ESP_BT_GENERAL_DISCOVERABLE);
 
-    /* Classic BT HFP device name (microphone/headset audio) */
+    /* Classic BT compound device name (microphone/headset + keyboard) */
     const uint8_t *addr = esp_bt_dev_get_address();
     if (addr) {
         snprintf(g_bt_device_name, sizeof(g_bt_device_name),
-                 "ESP32_MIC_%02X", addr[5]);
+                 "ESP32_BT_KBD_MIC_%02X", addr[5]);
     }
-    ESP_LOGI(TAG, "Bluetooth controller mode: BTDM (dual mode)");
-#else
-    ESP_LOGI(TAG, "Bluetooth controller mode: BLE only");
-#endif
+    ESP_LOGI(TAG, "Bluetooth controller mode: Classic BT Only (BR/EDR)");
 
     /* Start BT application task */
     bt_app_task_start_up();
@@ -270,37 +252,64 @@ esp_err_t bt_stack_init(void)
     return ESP_OK;
 }
 
-#if ENABLE_CLASSIC_BT_MIC
 static bool s_classic_bt_activated = false;
+static uint32_t s_last_activate_time = 0;
+static uint32_t s_last_deactivate_time = 0;
 
 void bt_classic_activate(void)
 {
     if (s_classic_bt_activated) return;
+
+    /* 频控防护：上一次挂断与本次重新建立之间必须间隔至少 1000ms，防抖防爆 */
+    uint32_t now = xTaskGetTickCount() * portTICK_PERIOD_MS;
+    if (now - s_last_deactivate_time < 1000) {
+        ESP_LOGW(TAG, "PTT activation ignored: click interval too short (<1000ms)");
+        return;
+    }
+
+    s_last_activate_time = now;
     s_classic_bt_activated = true;
-    ESP_LOGI(TAG, "Activating Classic BT HFP (making discoverable/connectable)...");
-    esp_bt_gap_set_scan_mode(ESP_BT_CONNECTABLE, ESP_BT_GENERAL_DISCOVERABLE);
+    ESP_LOGI(TAG, "PTT Button Pressed. Activating MIC (SCO)...");
 
     esp_bd_addr_t saved_addr = {0};
     if (config_storage_load_hfp_addr(saved_addr) == ESP_OK) {
-        ESP_LOGI(TAG, "Triggering classic BT HFP reconnect to saved peer...");
-        esp_hf_client_connect(saved_addr);
+        if (!bt_hfp_is_connected()) {
+            ESP_LOGI(TAG, "HFP control link not connected. Connecting HFP first...");
+            esp_hf_client_connect(saved_addr);
+        } else {
+            ESP_LOGI(TAG, "HFP control link connected. Direct connecting SCO channel...");
+            esp_hf_client_connect_audio(saved_addr);
+        }
+    } else {
+        ESP_LOGW(TAG, "No saved peer address for MIC activation. Please pair keyboard first.");
     }
 }
 
 void bt_classic_deactivate(void)
 {
     if (!s_classic_bt_activated) return;
-    s_classic_bt_activated = false;
-    ESP_LOGI(TAG, "Deactivating Classic BT HFP (making non-discoverable/non-connectable)...");
-    esp_bt_gap_set_scan_mode(ESP_BT_NON_CONNECTABLE, ESP_BT_NON_DISCOVERABLE);
 
-    if (bt_hfp_is_connected()) {
-        extern esp_bd_addr_t hf_peer_addr;
-        ESP_LOGI(TAG, "Disconnecting active classic BT HFP connection...");
-        esp_hf_client_disconnect(hf_peer_addr);
+    /* 延迟释放：若建立连接与本次挂断之间短于 800ms，则延迟执行，防止连接尚未完全建立就执行销毁引发底层死锁 */
+    uint32_t now = xTaskGetTickCount() * portTICK_PERIOD_MS;
+    if (now - s_last_activate_time < 800) {
+        uint32_t delay_ms = 800 - (now - s_last_activate_time);
+        ESP_LOGI(TAG, "Deferring SCO disconnect by %" PRIu32 " ms for link stability...", delay_ms);
+        vTaskDelay(pdMS_TO_TICKS(delay_ms));
+        now = xTaskGetTickCount() * portTICK_PERIOD_MS;
+    }
+
+    s_last_deactivate_time = now;
+    s_classic_bt_activated = false;
+    ESP_LOGI(TAG, "PTT Button Released. Deactivating MIC (SCO)...");
+
+    esp_bd_addr_t saved_addr = {0};
+    if (config_storage_load_hfp_addr(saved_addr) == ESP_OK) {
+        ESP_LOGI(TAG, "Disconnecting active classic BT HFP SCO channel...");
+        esp_hf_client_disconnect_audio(saved_addr);
     }
 }
-#else
-void bt_classic_activate(void) {}
-void bt_classic_deactivate(void) {}
-#endif
+
+bool bt_classic_is_ptt_activated(void)
+{
+    return s_classic_bt_activated;
+}

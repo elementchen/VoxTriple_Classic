@@ -12,9 +12,10 @@
 #include "driver/rtc_io.h"
 #include "esp_sleep.h"
 #include "esp_log.h"
+#include "esp_gap_bt_api.h"
+#include "esp_hidd_api.h"
 #include "button_handler.h"
-#include "ble_gatts_config.h"
-#include "ble_hid_keyboard.h"
+#include "classic_hidd.h"
 #include "config_storage.h"
 #include "bt_init.h"
 #include "esp_hf_client_api.h"
@@ -45,6 +46,17 @@ static void inactivity_sleep_cb(TimerHandle_t xTimer)
 
     vTaskDelay(pdMS_TO_TICKS(100));  /* let log flush */
     esp_deep_sleep_start();
+}
+
+static void get_button_mapping(uint8_t button_id, uint8_t *vk_code, uint8_t *modifier)
+{
+    if (config_storage_load_button(button_id, vk_code, modifier) != ESP_OK) {
+        *modifier = 0;
+        if (button_id == 0) *vk_code = 0x0D; // Enter
+        else if (button_id == 1) *vk_code = 0x1B; // Esc
+        else if (button_id == 2) *vk_code = 0x20; // Space
+        else if (button_id == 3) *vk_code = 0x09; // Tab
+    }
 }
 
 static const gpio_num_t s_button_pins[BUTTON_NUM] = {
@@ -108,23 +120,19 @@ static void button_task_func(void *arg)
 
                     /* Connection wake-up: if BLE is not connected, trigger advertising to connect keyboard.
                      * If BLE is already connected, activate Classic BT HFP (on key press) to connect microphone. */
-                    if (!ble_hid_is_connected()) {
-                        ble_gatts_adv_start();
+                    /* Connection wake-up & HFP SCO activation */
+                    if (classic_hidd_is_connected()) {
+                        uint8_t vk = 0, mod = 0;
+                        get_button_mapping(i, &vk, &mod);
+                        classic_hidd_send_key(mod, vk);
                     } else {
-#if ENABLE_CLASSIC_BT_MIC
-                        bt_classic_activate();
-                        bt_hfp_hf_wake_acl();
-#endif
+                        ESP_LOGW(TAG, "Classic BT HID not connected. Button press triggers reconnect...");
+                        esp_bd_addr_t saved_addr;
+                        if (config_storage_load_hfp_addr(saved_addr) == ESP_OK) {
+                            ESP_LOGI(TAG, "Saved host address found. Initiating reconnect to Host...");
+                            esp_bt_hid_device_connect(saved_addr);
+                        }
                     }
-
-                    /* Indicator LED on Button 1 press — only if BLE is connected */
-                    if (i == 0 && ble_gatts_is_connected()) gpio_set_level(INDICATOR_LED_GPIO, 1);
-
-                    /* BLE notification for keyboard shortcut (Python app display) */
-                    ble_send_button_event(i, 1);
-
-                    /* Send HID keyboard report directly to Windows/Mac */
-                    ble_hid_send_key(ble_get_button_vk(i), ble_get_button_mod(i), true);
                 }
                 break;
 
@@ -133,14 +141,30 @@ static void button_task_func(void *arg)
                     uint32_t duration = now - press_time[i];
                     ESP_LOGI(TAG, "Button %d released (duration: %lu ms)", i + 1, duration);
 
-                    /* Indicator LED off on Button 1 release */
-                    if (i == 0) gpio_set_level(INDICATOR_LED_GPIO, 0);
+                    /* Button 4 long press (> 3000ms) to clear all BT pairings & reset */
+                    if (i == 3 && duration >= 3000) {
+                        ESP_LOGW(TAG, "Button 4 long pressed! Clearing BT pairings and restarting...");
+                        
+                        // 1. Flash LED as physical feedback
+                        for (int j = 0; j < 6; j++) {
+                            gpio_set_level(INDICATOR_LED_GPIO, j % 2);
+                            vTaskDelay(pdMS_TO_TICKS(100));
+                        }
+                        
+                        // 2. Remove pairing bond info from Bluedroid stack
+                        esp_bd_addr_t saved_addr;
+                        if (config_storage_load_hfp_addr(saved_addr) == ESP_OK) {
+                            esp_bt_gap_remove_bond_device(saved_addr);
+                        }
+                        
+                        // 3. Clear application configuration in NVS
+                        config_storage_clear_all();
+                        
+                        // 4. Force restart
+                        esp_restart();
+                    }
 
-                    /* BLE notification for keyboard shortcut release */
-                    ble_send_button_event(i, 0);
 
-                    /* Release HID keyboard key */
-                    ble_hid_send_key(ble_get_button_vk(i), ble_get_button_mod(i), false);
 
                     state[i] = BTN_STATE_IDLE;
                 }

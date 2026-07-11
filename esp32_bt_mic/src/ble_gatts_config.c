@@ -20,6 +20,7 @@
 #include "esp_bt.h"
 #include "esp_hidd.h"
 #include "esp_mac.h"
+#include "esp_gap_bt_api.h"
 #include "ble_gatts_config.h"
 #include "config_storage.h"
 #include "bt_init.h"
@@ -30,7 +31,16 @@ static const char *TAG = "BLE_GATTS";
 
 /* GCC 链接器包装函数：延迟 esp_ble_set_encryption 调用，让 Windows 先发起加密。
  * 完全屏蔽模式会导致 BTM 安全上下文未初始化 → "Device not found"。
- * 延迟 500ms 后放行，此时 Windows 加密已在进行中，我们的请求被安全入队。 */
+ * 延迟一定时间后放行，此时 Windows 加密已在进行中，我们的请求被安全入队。
+ * 在双模共存模式下，由于 NVS 中已保存经典蓝牙的 Link Key，重启加载时 key_mask 畸变（变成 0x0F 丢失对端 IRK PID），
+ * 这会导致 Windows 在重连后 20-30ms 内发起加密时由于无安全上下文而触发 Device not found。
+ * 此时我们必须将延时设定为极短（如 10ms）以提早初始化安全上下文。而在纯 BLE 下，保持 10000ms（10秒）延时规避碰撞。 */
+#if ENABLE_CLASSIC_BT_MIC
+#define DELAY_ENC_MS 10
+#else
+#define DELAY_ENC_MS 10000
+#endif
+
 extern esp_err_t __real_esp_ble_set_encryption(esp_bd_addr_t bd_addr, esp_ble_sec_act_t sec_act);
 
 static TimerHandle_t s_delayed_enc_timer = NULL;
@@ -39,7 +49,7 @@ static esp_ble_sec_act_t s_delayed_enc_act;
 
 static void delayed_enc_timer_cb(TimerHandle_t xTimer)
 {
-    ESP_LOGI("WRAP_ENC", "[Timer] 500ms elapsed — calling real esp_ble_set_encryption");
+    ESP_LOGI("WRAP_ENC", "[Timer] %d ms elapsed — calling real esp_ble_set_encryption", DELAY_ENC_MS);
     __real_esp_ble_set_encryption(s_delayed_enc_addr, s_delayed_enc_act);
 }
 
@@ -47,11 +57,11 @@ esp_err_t __wrap_esp_ble_set_encryption(esp_bd_addr_t bd_addr, esp_ble_sec_act_t
 {
     int bond_num = esp_ble_get_bond_device_num();
     if (bond_num > 0) {
-        ESP_LOGI("WRAP_ENC", "Bonded reconnect: deferring esp_ble_set_encryption by 500ms");
+        ESP_LOGI("WRAP_ENC", "Bonded reconnect: deferring esp_ble_set_encryption by %d ms", DELAY_ENC_MS);
         memcpy(s_delayed_enc_addr, bd_addr, sizeof(esp_bd_addr_t));
         s_delayed_enc_act = sec_act;
         if (s_delayed_enc_timer == NULL) {
-            s_delayed_enc_timer = xTimerCreate("del_enc", pdMS_TO_TICKS(500),
+            s_delayed_enc_timer = xTimerCreate("del_enc", pdMS_TO_TICKS(DELAY_ENC_MS),
                                                 pdFALSE, NULL, delayed_enc_timer_cb);
         }
         if (s_delayed_enc_timer) {
@@ -130,7 +140,7 @@ static esp_ble_adv_params_t adv_params = {
     .adv_int_min        = 0x060,  /* 60 ms */
     .adv_int_max        = 0x060,
     .adv_type           = ADV_TYPE_IND,
-    .own_addr_type      = BLE_ADDR_TYPE_PUBLIC,
+    .own_addr_type      = BLE_ADDR_TYPE_RANDOM,
     .channel_map        = ADV_CHNL_ALL,
     .adv_filter_policy  = ADV_FILTER_ALLOW_SCAN_ANY_CON_ANY,
 };
@@ -173,38 +183,22 @@ static void ble_init_adv_data(const char *name)
     char ble_name[16];
     esp_bd_addr_t ble_mac;
     if (esp_read_mac(ble_mac, ESP_MAC_BT) == ESP_OK) {
-        /* 控制变量诊断测试：注释随机地址注册逻辑，直接使用 Public 物理 MAC */
-        /* ble_mac[0] = 0xC0; */
-        /* ble_mac[5] ^= 2;   */
-        /* esp_ble_gap_set_rand_addr(ble_mac); */
+        /* 静态随机地址：最高两位设为 11 符合规范，最后一字节异或 2 进行隔离 */
+        ble_mac[0] = 0xC0;
+        ble_mac[5] ^= 2;
+        esp_err_t err = esp_ble_gap_set_rand_addr(ble_mac);
+        if (err == ESP_OK) {
+            ESP_LOGI(TAG, "BLE Static Random MAC set to %02X:%02X:%02X:%02X:%02X:%02X",
+                     ble_mac[0], ble_mac[1], ble_mac[2], ble_mac[3], ble_mac[4], ble_mac[5]);
+        } else {
+            ESP_LOGE(TAG, "Set BLE rand address failed: %s", esp_err_to_name(err));
+        }
         snprintf(ble_name, sizeof(ble_name), "ESP32_KB_%02X", ble_mac[5]);
     } else {
         snprintf(ble_name, sizeof(ble_name), "ESP32_KB");
     }
     esp_ble_gap_set_device_name(ble_name);
     esp_ble_gap_config_local_icon(0x03C1); // 显式设置 GAP Appearance 为 HID Keyboard，确保首次配对图标正确
-
-    /* BLE SMP — Secure Connections bonding, no I/O capability.
-     * Legacy pairing (ESP_LE_AUTH_BOND) 在 Bluedroid 下重启后 LTK 的 EDIV/Rand 映射不可靠，
-     * 导致 "Device not found" 和 MIC Failure。SC 模式的 LTK 直接对称计算，持久化更可靠。
-     * Wrapper 函数 __wrap_esp_ble_set_encryption 已阻止从端主动加密，消除了 SC 下的双向碰撞。 */
-    esp_ble_auth_req_t auth_req = ESP_LE_AUTH_REQ_SC_BOND;
-    esp_ble_io_cap_t iocap = ESP_IO_CAP_NONE;
-    esp_ble_gap_set_security_param(ESP_BLE_SM_AUTHEN_REQ_MODE, &auth_req, 1);
-    esp_ble_gap_set_security_param(ESP_BLE_SM_IOCAP_MODE, &iocap, 1);
-
-    /* 配置对称密钥分发：
-     * 在 SC (Secure Connections) 模式下，LTK 是通过 ECDH 计算得出的对称密钥，
-     * 双方无需且不应通过空中分发 ENC_KEY (LTK)。我们只需要分发 ID_KEY (IRK) 即可。
-     * 分发 ENC_KEY 会在 NVS 中写入 LE_KEY_PENC 键，导致重启加载时被 Bluedroid 误判为 Legacy 绑定，
-     * 进而导致加载错误密钥发生 MIC Failure (0x3d) 断连。只分发 ID_KEY 即可正确加载。
-     */
-    uint8_t init_key = ESP_BLE_ID_KEY_MASK;
-    uint8_t rsp_key = ESP_BLE_ID_KEY_MASK;
-    uint8_t key_size = 16;
-    esp_ble_gap_set_security_param(ESP_BLE_SM_SET_INIT_KEY, &init_key, 1);
-    esp_ble_gap_set_security_param(ESP_BLE_SM_SET_RSP_KEY, &rsp_key, 1);
-    esp_ble_gap_set_security_param(ESP_BLE_SM_MAX_KEY_SIZE, &key_size, 1);
 
     /* 128-bit HID service UUID for advertising */
     const uint8_t hid_uuid128[] = {
@@ -227,7 +221,8 @@ static void ble_init_adv_data(const char *name)
         .p_service_data     = NULL,
         .service_uuid_len   = sizeof(hid_uuid128),
         .p_service_uuid     = (uint8_t *)hid_uuid128,
-        .flag               = ESP_BLE_ADV_FLAG_GEN_DISC,
+        /* 强制设置 BREDR_NOT_SPT (不支持经典蓝牙) 标志，欺骗 Windows 将其注册为纯 BLE 单模键盘，防止双模合并碰撞 */
+        .flag               = ESP_BLE_ADV_FLAG_GEN_DISC | ESP_BLE_ADV_FLAG_BREDR_NOT_SPT,
     };
 
     esp_err_t ret = esp_ble_gap_config_adv_data(&adv_data);
@@ -237,7 +232,7 @@ static void ble_init_adv_data(const char *name)
         uint8_t raw[31];
         int p = 0;
         raw[p++] = 0x02; raw[p++] = ESP_BLE_AD_TYPE_FLAG;
-        raw[p++] = ESP_BLE_ADV_FLAG_GEN_DISC;
+        raw[p++] = ESP_BLE_ADV_FLAG_GEN_DISC | ESP_BLE_ADV_FLAG_BREDR_NOT_SPT;
         raw[p++] = 0x03; raw[p++] = ESP_BLE_AD_TYPE_APPEARANCE;
         raw[p++] = 0xC1; raw[p++] = 0x03;
         raw[p++] = 17; raw[p++] = ESP_BLE_AD_TYPE_128SRV_CMPL;
@@ -272,9 +267,9 @@ static void gap_event_handler(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param
     case ESP_GAP_BLE_ADV_DATA_RAW_SET_COMPLETE_EVT:
         break;
     case ESP_GAP_BLE_SCAN_RSP_DATA_RAW_SET_COMPLETE_EVT: {
-        /* 为了避开经典蓝牙首次自动重连的 Controller 冲突，将首次 BLE 广播启动延迟 5 秒 */
-        ESP_LOGI(TAG, "Scan response data complete. Deferring initial advertising by 5 seconds...");
-        TimerHandle_t t = xTimerCreate("first_adv", pdMS_TO_TICKS(5000), pdFALSE, NULL, adv_retry_cb);
+        /* 为了避开经典蓝牙首次自动重连的 Controller 冲突，将首次 BLE 广播启动延迟 10 秒 */
+        ESP_LOGI(TAG, "Scan response data complete. Deferring initial advertising by 10 seconds...");
+        TimerHandle_t t = xTimerCreate("first_adv", pdMS_TO_TICKS(10000), pdFALSE, NULL, adv_retry_cb);
         if (t) {
             xTimerStart(t, 0);
         } else {
@@ -315,6 +310,10 @@ static void gap_event_handler(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param
         if (param->ble_security.auth_cmpl.success) {
             ESP_LOGI(TAG, "BLE Authentication success");
             print_bonded_devices("AUTH_CMPL");
+#if !ENABLE_CLASSIC_BT_MIC
+            /* 纯 BLE 模式：删除派生的经典蓝牙 Link Key，防止 key_mask 畸变 */
+            esp_bt_gap_remove_bond_device(param->ble_security.auth_cmpl.bd_addr);
+#endif
         } else {
             ESP_LOGE(TAG, "BLE Authentication failed, reason = 0x%x", param->ble_security.auth_cmpl.fail_reason);
         }
@@ -745,6 +744,28 @@ static void gatts_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_
         ESP_LOGI(TAG, "BLE client disconnected");
         s_ble_connected = false;
         s_conn_id = 0;
+        /* 取消未执行的延迟加密定时器 */
+        if (s_delayed_enc_timer) {
+            xTimerStop(s_delayed_enc_timer, 0);
+        }
+
+        /* BLE 断开时，清理任何派生的经典蓝牙 Link Key，确保下一次重连时 key_mask 不畸变 */
+#if !ENABLE_CLASSIC_BT_MIC
+        {
+            int dev_num = esp_ble_get_bond_device_num();
+            if (dev_num > 0) {
+                esp_ble_bond_dev_t *dev_list = malloc(dev_num * sizeof(esp_ble_bond_dev_t));
+                if (dev_list) {
+                    if (esp_ble_get_bond_device_list(&dev_num, dev_list) == ESP_OK) {
+                        for (int i = 0; i < dev_num; i++) {
+                            esp_bt_gap_remove_bond_device(dev_list[i].bd_addr);
+                        }
+                    }
+                    free(dev_list);
+                }
+            }
+        }
+#endif
 
         /* BLE 断开时，停用经典蓝牙（隐藏广播并断开连接） */
 #if ENABLE_CLASSIC_BT_MIC
@@ -752,10 +773,10 @@ static void gatts_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_
 #endif
 
         /* Aggressive retry: first disconnect → immediate restart.
-         * If it fails again quickly (BTDM conflict), back off to 3s. */
+         * If it fails again quickly (BTDM conflict), back off to 5s. */
         static uint32_t last_disc_ms = 0;
         uint32_t now_ms = xTaskGetTickCount() * portTICK_PERIOD_MS;
-        uint32_t delay_ms = (now_ms - last_disc_ms < 30000) ? 3000 : 0;
+        uint32_t delay_ms = (now_ms - last_disc_ms < 30000) ? 5000 : 0;
         last_disc_ms = now_ms;
 
         if (delay_ms == 0) {
@@ -780,6 +801,42 @@ static void gatts_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_
 void ble_gatts_init(void)
 {
     ESP_LOGI(TAG, "Initializing BLE GATT server");
+
+    /* 恢复启用 Secure Connections (LESC) 协商双向加密密钥，解决传统配对下双模单侧 LTK 角色匹配错位引发的 Device not found */
+    esp_ble_auth_req_t auth_req = ESP_LE_AUTH_REQ_SC_BOND;
+    esp_ble_io_cap_t iocap = ESP_IO_CAP_NONE;
+    esp_ble_gap_set_security_param(ESP_BLE_SM_AUTHEN_REQ_MODE, &auth_req, 1);
+    esp_ble_gap_set_security_param(ESP_BLE_SM_IOCAP_MODE, &iocap, 1);
+
+    /* 关闭本地 Privacy，使用静态物理 MAC 地址，强制重连时双方均使用 Public 地址 */
+    esp_ble_gap_config_local_privacy(false);
+
+    /* 还原 ID_KEY (IRK) 密钥分发，允许交换和保存 IRK 以解析 Windows 重新连接时采用的 RPA 地址 */
+    uint8_t init_key = ESP_BLE_ENC_KEY_MASK | ESP_BLE_ID_KEY_MASK;
+    uint8_t rsp_key = ESP_BLE_ENC_KEY_MASK | ESP_BLE_ID_KEY_MASK;
+    uint8_t key_size = 16;
+    esp_ble_gap_set_security_param(ESP_BLE_SM_SET_INIT_KEY, &init_key, 1);
+    esp_ble_gap_set_security_param(ESP_BLE_SM_SET_RSP_KEY, &rsp_key, 1);
+    esp_ble_gap_set_security_param(ESP_BLE_SM_MAX_KEY_SIZE, &key_size, 1);
+    /* =================================================================== */
+
+    /* 纯 BLE 模式：启动时清除任何残留的经典蓝牙 Link Key 缓存，防止 key_mask 被污染成 0x6B 导致重连 MIC Failure */
+#if !ENABLE_CLASSIC_BT_MIC
+    {
+        int dev_num = esp_ble_get_bond_device_num();
+        if (dev_num > 0) {
+            esp_ble_bond_dev_t *dev_list = malloc(dev_num * sizeof(esp_ble_bond_dev_t));
+            if (dev_list) {
+                if (esp_ble_get_bond_device_list(&dev_num, dev_list) == ESP_OK) {
+                    for (int i = 0; i < dev_num; i++) {
+                        esp_bt_gap_remove_bond_device(dev_list[i].bd_addr);
+                    }
+                }
+                free(dev_list);
+            }
+        }
+    }
+#endif
 
     esp_err_t ret = esp_ble_gatts_register_callback(gatts_event_handler);
     if (ret) {
@@ -887,4 +944,9 @@ void ble_gatts_adv_start(void)
 bool ble_gatts_is_connected(void)
 {
     return s_ble_connected;
+}
+
+void ble_print_bonded_devices(const char *caller)
+{
+    print_bonded_devices(caller);
 }

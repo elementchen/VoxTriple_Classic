@@ -90,4 +90,9 @@ void ble_gatts_adv_start(void);
  */
 bool ble_gatts_is_connected(void);
 
+/**
+ * @brief Print bonded devices status (Debug)
+ */
+void ble_print_bonded_devices(const char *caller);
+
 #endif /* __BLE_GATTS_CONFIG_H__ */

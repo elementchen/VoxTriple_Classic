@@ -8,6 +8,7 @@
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
+#include "driver/gpio.h"
 #include <inttypes.h>
 #include "esp_log.h"
 #include "esp_bt_main.h"
@@ -25,7 +26,6 @@
 #include "bt_init.h"
 #include "config_storage.h"
 #include "audio_capture.h"
-#include "ble_gatts_config.h"
 #include "osi/allocator.h"
 
 /* --- Local BTM power-mode API (internal, not in public headers) --- */
@@ -145,10 +145,7 @@ static void apply_gain(uint8_t *buf, size_t len)
 
 static void audio_dsp_process(uint8_t *buf, size_t len)
 {
-    apply_hpf(buf, len);               /* remove low-frequency rumble */
-    apply_moving_average(buf, len);    /* smooth digital hiss/spikes */
-    apply_gain(buf, len);              /* boost volume (3x = ~9.5dB) */
-    apply_noise_gate(buf, len);        /* enable noise gate to eliminate quiet environment hiss */
+    // Diagnostic Pass-through: do not apply any filtering/gain/gating for clean hardware testing
 }
 
 #if CONFIG_BT_HFP_AUDIO_DATA_PATH_HCI
@@ -177,8 +174,7 @@ static uint32_t bt_app_hf_outgoing_cb(uint8_t *p_buf, uint32_t sz)
     size_t item_size = 0;
 
     if (!s_m_rb || !s_audio_running) {
-        memset(p_buf, 0, sz);
-        return sz;
+        return 0; // Ensure continuous data feed to AG when audio stream is running to prevent link timeouts
     }
 
     /* On first call after SCO opens, discard stale audio from the
@@ -235,7 +231,22 @@ static void bt_app_send_data_task(void *arg)
             /* Only process aligned reads so DSP gets whole int16 samples */
             if (ret == ESP_OK && bytes_read >= 2 && (bytes_read & 1) == 0) {
                 audio_dsp_process(buf, bytes_read);
+
+                // Print the first 6 bytes of samples every ~250ms to diagnose if I2S data is all zeros
+                static int print_cnt = 0;
+                if (++print_cnt % 50 == 0) {
+                    ESP_LOGI("AUDIO_DIAG", "I2S raw data: %02x %02x %02x %02x %02x %02x (read=%d)",
+                             buf[0], buf[1], buf[2], buf[3], buf[4], buf[5], (int)bytes_read);
+                }
+
                 xRingbufferSend(s_m_rb, buf, bytes_read, 0);
+            } else {
+                // Log I2S read failures or timeouts
+                static int err_cnt = 0;
+                if (++err_cnt % 50 == 0) {
+                    ESP_LOGE("AUDIO_DIAG", "I2S read failed/timeout: ret=%d (%s), read=%d",
+                             ret, esp_err_to_name(ret), (int)bytes_read);
+                }
             }
 
             size_t item_size = 0;
@@ -407,6 +418,8 @@ static const char *c_audio_state_str[] = {
     "CONNECTED_MSBC",
 };
 
+
+
 void bt_app_hf_client_cb(esp_hf_client_cb_event_t event, esp_hf_client_cb_param_t *param)
 {
     if (event <= ESP_HF_CLIENT_PROF_STATE_EVT) {
@@ -427,18 +440,16 @@ void bt_app_hf_client_cb(esp_hf_client_cb_event_t event, esp_hf_client_cb_param_
         bool connected = (param->conn_stat.state == ESP_HF_CLIENT_CONNECTION_STATE_SLC_CONNECTED);
         bt_hfp_set_connected(connected);
 
-        extern void ble_send_device_status(uint8_t hfp_connected, uint8_t audio_active);
-        ble_send_device_status(bt_hfp_is_connected(), bt_audio_is_active());
-
         if (connected) {
             ESP_LOGI(TAG, "SLC connected, starting audio pipeline");
-            /* Remember this device so BLE connect can trigger HFP reconnect */
+            /* Remember this device so Classic BT HID can reconnect */
             config_storage_save_hfp_addr(hf_peer_addr);
-            /* Start audio pipeline once on SLC connect — stays running
-             * across multiple SCO start/stop cycles. Avoids per-cycle
-             * create/delete races that cause "invalid air mode: 255". */
+            /* Start audio pipeline once on SLC connect */
             bt_app_work_dispatch(audio_start_handler, 0, NULL, 0, NULL);
 
+            // Always-On mode: automatically activate HFP client and launch audio link
+            extern void bt_classic_activate(void);
+            bt_classic_activate();
         } else if (param->conn_stat.state == ESP_HF_CLIENT_CONNECTION_STATE_DISCONNECTED) {
             /* Stop audio pipeline when HFP disconnects entirely */
             bt_app_work_dispatch(audio_stop_handler, 0, NULL, 0, NULL);
@@ -455,10 +466,6 @@ void bt_app_hf_client_cb(esp_hf_client_cb_event_t event, esp_hf_client_cb_param_
 
             s_audio_codec = param->audio_stat.state;
 
-            /* Pause BLE advertising during active SCO — avoids BTDM
-             * scheduling conflicts between BLE and SCO timeslots. */
-            ble_gatts_adv_stop();
-
             /* Discard stale audio from the ring buffer so the
              * previous session doesn't bleed into this one. */
             s_flush_ringbuf = true;
@@ -467,23 +474,16 @@ void bt_app_hf_client_cb(esp_hf_client_cb_event_t event, esp_hf_client_cb_param_
             esp_hf_client_register_data_callback(bt_app_hf_incoming_cb, bt_app_hf_outgoing_cb);
 
             bt_audio_set_active(true);
-
-            extern void ble_send_device_status(uint8_t hfp_connected, uint8_t audio_active);
-            ble_send_device_status(bt_hfp_is_connected(), bt_audio_is_active());
+            gpio_set_level(GPIO_NUM_18, 1); // Turn indicator LED ON when mic/SCO is active
 
         } else if (param->audio_stat.state == ESP_HF_CLIENT_AUDIO_STATE_DISCONNECTED) {
             ESP_LOGI(TAG, "Audio disconnected");
-            s_ptt_opened_audio = false;
             bt_audio_set_active(false);
+            gpio_set_level(GPIO_NUM_18, 0); // Turn indicator LED OFF when mic/SCO is inactive
 
             /* Unregister data callbacks — pipeline keeps running */
             esp_hf_client_register_data_callback(NULL, NULL);
 
-            /* Resume BLE advertising now that SCO timeslots are freed */
-            ble_gatts_adv_start();
-
-            extern void ble_send_device_status(uint8_t hfp_connected, uint8_t audio_active);
-            ble_send_device_status(bt_hfp_is_connected(), bt_audio_is_active());
         }
 #endif
         break;

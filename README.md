@@ -49,32 +49,29 @@
 | Buttons 按钮 | 6×6mm tactile switch / 轻触开关 | 3 |
 | Capacitor (optional) 电容(可选) | 100nF ceramic for hardware noise reduction / 瓷片电容用于硬件降噪 | 1 |
 
-## Wiring / 接线
+## Wiring / 接线说明
 
 ```
-INMP441 → ESP32:
-  VDD  → 3.3V          Never connect to 5V! / 不可接 5V！
+INMP441 (麦克风) → ESP32:
+  VDD  → 3.3V          Never connect to 5V! / 严禁接 5V！
   GND  → GND
-  L/R  → GND           Left channel / 左声道
-  SD   → GPIO 17       I2S data input / 数据输入 (left side, away from antenna)
-  WS   → GPIO 33       Word select / 字选择 (LRCLK)
-  SCK  → GPIO 25       Bit clock / 位时钟 (BCLK)
+  L/R  → GND           Left channel / 必须接地设为左声道
+  SD   → GPIO 17       I2S Serial Data (SD)
+  WS   → GPIO 22       Word Select (LRC / WS)
+  SCK  → GPIO 21       Serial Clock (BCLK / SCK)
 
-Button 1 → GPIO 16     Keyboard shortcut + indicator LED / 快捷键 + 指示灯
-Button 2 → GPIO 14     Keyboard shortcut / 快捷键
-Button 3 → GPIO 18     Keyboard shortcut / 快捷键
+Buttons (按键) → ESP32:
+  Button 1 → GPIO 4     Key 1 (Default: Enter / 回车)
+  Button 2 → GPIO 16    Key 2 (Default: Esc / 退出)
+  Button 3 → GPIO 19    Key 3 (Default: Space / 空格)
+  Button 4 → GPIO 23    Key 4 (Default: Tab / 制表键) [长按3秒清除绑定并重启]
 
-LED → ESP32:
-  Anode → GPIO 26       via current-limiting resistor / 经限流电阻
-  Cathode → GND
+Status LED (录音状态指示灯) → ESP32:
+  Anode (正极)   → GPIO 18    via a 220Ω current-limiting resistor / 经 220Ω 限流电阻
+  Cathode (负极) → GND
 
-Buttons are wired active-low (GPIO → button → GND) with internal pull-up enabled.
-按钮为低电平有效（GPIO → 按键 → GND），使用内部上拉电阻。
-
-Antenna keep-out / 天线净空:
-  Keep wires away from the right edge of the ESP32 module (PCB antenna area).
-  I2S DATA (high-speed) should be routed on the left side to avoid RF interference.
-  布线请避开模组右侧边缘（PCB 天线区域）。高速 I2S 数据线请走左侧，避免射频干扰。
+* All buttons are active-low (GPIO → Button → GND) with internal pull-up enabled.
+* 所有按键均为低电平有效，接线方式为 GPIO 引脚接按键再到 GND，使用内部上拉。
 ```
 
 ## Quick Start / 快速开始
@@ -110,16 +107,16 @@ dotnet publish -r win-x64 -c Release -p:PublishSingleFile=true --self-contained 
 
 ### 4. Daily Use / 日常使用
 
-1. The app auto-connects BLE on launch and reads the current button mappings from the ESP32.
-   应用启动时自动连接 BLE 并读取 ESP32 上当前的按钮映射。
-2. Click `Capture Key`, press any key on your keyboard, optionally check modifier boxes (Ctrl, Shift, etc.), then click `Write to Device`.
-   点击 `Capture Key`，按下键盘上的任意按键，可选勾选修饰键（Ctrl/Shift 等），然后点击 `Write to Device`。
-3. Hold **Button 1** to speak (PTT). Windows opens the Bluetooth microphone audio channel while the mapped key is held.
-   按住 **Button 1** 说话（PTT），Windows 在按住期间打开蓝牙麦克风音频通道。
-4. Press **Button 2** / **Button 3** to trigger their configured keyboard shortcuts.
-   按下 **Button 2** / **Button 3** 触发各自配置的键盘快捷键。
-5. Check `开机自动启动` in the app to have it launch automatically when Windows boots.
-   勾选界面中的 `开机自动启动` 即可在 Windows 开机时自动启动应用。
+1. **Bluetooth Pairing (蓝牙配对)**: Pair the device `ESP32_BT_KBD_MIC_XX` from Windows settings. The keyboard profile and microphone profile are both configured automatically.
+   打开 Windows 蓝牙设置配对 `ESP32_BT_KBD_MIC_XX`。配对成功后，蓝牙键盘与麦克风设备都将由系统自动安装并就绪。
+2. **Keyboard Config (快捷键改键配置)**: Open the Windows companion WPF app. It automatically connects over BLE and allows mapping Buttons 1-4 to any Virtual-Key codes or modifiers.
+   打开 Windows WPF 配置应用。它会自动通过 BLE 连接开发板，并允许为按键 1-4 映射任意的键盘键码及修饰键组合。
+3. **Always-On Mic (免按键常开麦克风)**: The microphone channel (SCO) connects automatically whenever the device pairs/reconnects. You can speak instantly into Windows Speech Recognition or voice input apps without pressing physical buttons. The status LED (GPIO 18) stays solid while recording.
+   设备连入电脑后，麦克风（SCO 通道）会自动发起连接并保持常开。您可以直接使用 Windows 语音输入或各类语音软件，无需物理按压任何按键。录音时状态指示灯（GPIO 18）常亮。
+4. **Physical Keypress Reconnect (随点随连)**: If you restart the ESP32 or lose connection, press **any of the 4 buttons** to trigger a fast reconnect to the host.
+   当开发板重启或发生断连时，**按下 1-4 键的任意一个键**，都会在后台立即向电脑发起重连呼叫，保障键盘和麦克风快速连回。
+5. **Reset Pairing (重置配对)**: Hold **Button 4** for 3 seconds to clear paired links and reset configurations to default.
+   长按 **按键 4** 达 3 秒即可自动擦除已配对的蓝牙主机信息并恢复出厂设置。
 
 ## Project Structure / 项目结构
 

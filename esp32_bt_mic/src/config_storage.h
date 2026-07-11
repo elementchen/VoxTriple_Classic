@@ -84,4 +84,9 @@ esp_err_t config_storage_save_sleep_mode(uint8_t enabled);
  */
 esp_err_t config_storage_load_sleep_mode(uint8_t *enabled);
 
+/**
+ * @brief Clear all keys in NVS namespace
+ */
+esp_err_t config_storage_clear_all(void);
+
 #endif /* __CONFIG_STORAGE_H__ */

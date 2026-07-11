@@ -22,26 +22,53 @@
 
 ### 踩坑 2：重连时双向发起加密忙死锁闪断 (BTM_SetEncryption busy)
 * **故障现象**: ESP32 重启后，Windows 主动发起重连，串口频繁打印 `BTM_SetEncryption busy` 并立即断开，伴随 Windows 端提示“配对损坏”或连接闪退。
-* **原因分析**: Bluedroid 官方 `esp_hid` 的 `ble_hidd.c` 在接收到底层 `ESP_GATTS_CONNECT_EVT` 事件时，会无条件主动调用 `esp_ble_set_encryption()` 发起从端加密。而 Windows 作为主端，重连时也会在几毫秒内主动拉起主端加密。双方同时发起加密在协议栈底层产生锁冲突。
-* **先前失败尝试**:
-  在 `ble_gatts_config.c` 中通过变量 `s_connect_event_deferred` 拦截已绑定重连的 `GATTS_CONNECT_EVT` 不发给 `esp_hid`，直到 `ESP_GAP_BLE_AUTH_CMPL_EVT` 成功后再补发。
-  * **副作用**: 拦截事件导致 Bluedroid 内部的 MTU 交换等基础 GATT/GAP 握手时序不发生，Windows 超时（90ms 左右）直接单方面撕毁连接。
-* **最终消解方案 (对称密钥分发 + 拦截延迟分发的协同消解)**:
-  - **对称密钥分发解决 RPA 地址映射 (解决 Device not found)**: 将 `init_key` 和 `rsp_key` 设为对称分发（包含 `ID_KEY`），使两端正确交换 IRK。重启后在系统初始化（GATTS_INIT）时成功从 NVS 加载设备。
-  - **拦截延迟分发解决加密忙死锁 (解决 BTM_SetEncryption busy)**: 对已绑定设备重连（`bond_num > 0`），拦截 `GATTS_CONNECT_EVT` 不分发给官方 `esp_hid`，阻止从端主动拉起加密。直到主端 Windows 顺利拉起加密且触发认证成功（`ESP_GAP_BLE_AUTH_CMPL_EVT`）后，再补发连接事件，彻底消除双向发起加密的并发锁死。
+* **原因分析**: Bluedroid 官方 `esp_hid` 的 `ble_hidd.c` 在接收到底层 `ESP_GATTS_CONNECT_EVT` 事件时，会无条件主动调用 `esp_ble_set_encryption()` 发起从端加密（Security Request）。而 Windows 作为主端，重连时也会在几毫秒内主动拉起主端加密（`LL_ENC_REQ`）。两端并发发起加密在协议栈底层产生锁冲突。
+* **先前失败尝试**：
+  1. 通过变量拦截 `GATTS_CONNECT_EVT` 导致 Windows 超时。
+  2. 采用 GCC wrapper 将 `esp_ble_set_encryption` 延迟 500ms 触发。但在延迟的 500ms 期间，Windows 仍会在 40ms 时发起加密并与后续的 500ms 延时调用发生时序冲突，且仍存双向碰撞隐患。
+* **最终消解方案 (被动响应加密拦截)**:
+  在 GCC Wrapper (`__wrap_esp_ble_set_encryption`) 中，对已绑定重连的设备（`bond_num > 0`），直接丢弃主动加密请求并返回 `ESP_OK`（彻底不调用 `__real_esp_ble_set_encryption`）。这样从端绝对不会主动拉起加密，而是 100% 被动响应主端 Windows 的加密包，时序最简，彻底消除了碰撞和锁死。
 
 ### 踩坑 3：重连发生 MIC Failure 闪退 (rsn 0x3d) 并伴随 Device not found
-* **故障现象**: ESP32 重启后，Windows 主动发起重连，但在 60ms 内即断连（HCI reason 0x3d / rsn 102），串口显示：
-  `W (12131) BT_APPL: bta_dm_ble_smp_cback remove bond,rsn 102, BDA:0xF44EFC143CA7`
-  `E (12131) BT_BTM: Device not found`
+* **故障现象**: ESP32 重启后，Windows 主动发起重连，但在 40ms 内即断连（HCI reason 0x3d / rsn 102），串口显示 `bta_dm_ble_smp_cback remove bond,rsn 102` 并删除绑定。
 * **原因分析**:
-  配对时本端 `init_key` 仅分发了 `ENC_KEY`，没有分发 `ID_KEY`，导致 Windows 亦未能与本端交换并保存 `IRK` (Identity Resolving Key) 密钥。当 Windows 重启以 RPA (可解析随机地址) 重连时，由于缺乏本端及对端的身份映射，ESP32 判定该设备未曾配对（Device not found），无法获取其 LTK 密钥进行解密，进而触发 MIC Failure 断开。
-* **消解方案**:
-  在安全参数中将 `init_key` 和 `rsp_key` 设为对称分发模式，允许双方完整交互 `ID_KEY` (IRK 密钥及身份地址)：
+  先前尝试在安全参数中将 `init_key` 和 `rsp_key` 仅设为分发 `ID_KEY`（剥离了 `ENC_KEY`），希望防止 NVS 写入 `LE_KEY_PENC`。但这导致 Windows 蓝牙子系统没有保存或正确同步 LTK。重连时，Windows 发起加密，而 ESP32 响应的密钥不匹配，导致控制器发生 MIC Failure。
+* **最终消解方案 (对称分发还原)**:
+  必须在 GAP 初始化时，将 `init_key` 和 `rsp_key` 还原为对称包含 `ENC_KEY` 和 `ID_KEY`，确保配对时两端均成功且完整同步 LTK 和 IRK 信息：
   ```c
   uint8_t init_key = ESP_BLE_ENC_KEY_MASK | ESP_BLE_ID_KEY_MASK;
   uint8_t rsp_key = ESP_BLE_ENC_KEY_MASK | ESP_BLE_ID_KEY_MASK;
   ```
+  结合被动加密拦截，Windows 在重连时发送加密请求，ESP32 纯被动使用加载的 LTK 顺利完成解密，不再发生 MIC Failure 闪退。
+
+### 踩坑 4：纯 BLE 控制器模式下重连 `key_mask` 畸变为 `0x6B` 并导致 MIC Failure (0x3d)
+* **故障现象**: 在限制为纯 BLE 控制器模式且擦除 NVS 重新烧录后，首次配对成功时 `key_mask` 打印为 `0x67`。但按 EN 重启设备后，系统从 NVS 加载设备列表时，`key_mask` 却畸变为了 `0x6B`（即多出了 `ESP_LE_KEY_PLNK` 0x08 标志并丢失了 `PCSRK` 0x04 签名标志），自动重连时依然会由于解密错误触发 `0x3d` (MIC Failure) 断连。
+* **原因分析**:
+  这是因为在广播参数配置中，仅设置了 `ESP_BLE_ADV_FLAG_GEN_DISC`，**缺省了代表不支持经典蓝牙的 `ESP_BLE_ADV_FLAG_BREDR_NOT_SPT` (0x04) 标志**。对端 Windows 收到广播后判定该设备支持经典蓝牙（BR/EDR），于是在配对阶段自动拉起了跨传输密钥派生 (CTKD)，在后台派生并写入了经典蓝牙的 `Link Key` 并存入 NVS。
+  重启加载设备时，Bluedroid 从 NVS 中读取到该设备的 Link Key 记录，自动将设备识别为双模类型并将 `key_mask` 改为包含 `PLNK` (0x6B)。这种与纯 BLE 模式（Classic BT 控制器内存已完全释放）的不一致，导致了重连时协议栈解析与加载 LTK 错位，进而引发解密 MIC Failure。
+* **消解方案 (编译开启控制器 RPA 硬件解析与启用本地隐私)**:
+  通过开启编译期底层 RPA 解析并调用 GAP API 注册 IRK，从根本上解决 RPA 重连识别延迟的问题：
+  1. **启用编译配置**：在 `sdkconfig.nodemcu-32s` 和 `sdkconfig.defaults` 中，显式将 `# CONFIG_BT_BLE_RPA_SUPPORTED is not set` 变更为 **`CONFIG_BT_BLE_RPA_SUPPORTED=y`**。
+  2. **在广播中启用本地隐私 (Privacy)**：在 `ble_gatts_config.c` 的 `ble_init_adv_data` 阶段，在配置好安全参数后，显式调用 **`esp_ble_gap_config_local_privacy(true)`**：
+     ```c
+     esp_ble_gap_config_local_privacy(true);
+     ```
+     这会使 Bluedroid 协议栈在初始化时，自动将 NVS 中加载的已配对设备的 Identity Resolving Key (IRK) 注册写入控制器的硬件 Resolving List 中。
+  3. **保留 SC 配对级别**：有了底层的 RPA 硬件解析与广播 flags 的 `BREDR_NOT_SPT` 保护，本端可以继续使用高安全性的 **Secure Connections (`ESP_LE_AUTH_REQ_SC_BOND`)** 模式，实现安全的加密连接。
+  
+  通过此方案，重启后 Windows 发起加密时，控制器能够在硬件层面瞬间将 RPA 地址解析为 Identity Address (`F4:4E:FC:14:3C:A7`) 并正确加载对应的 LTK 配合解密，彻底消除 `Device not found` 与 `MIC Failure (0x3d)` 闪退，达到 100% 极速重连。
+
+### 踩坑 5：从端直接屏蔽 `esp_ble_set_encryption` 导致 BTM 安全上下文缺失
+* **故障现象**: 重连时依然发生 `remove bond, rsn 102` 与 `Device not found` 错误，连接瞬间断连。
+* **原因分析**: 
+  之前版本中，为了防止双向并发加密冲突，我们在 GCC Wrapper 中直接对 `bond_num > 0` 的连接返回了 `ESP_OK`（完全屏蔽了底层 `esp_ble_set_encryption` 的执行）。
+  然而，完全屏蔽该调用导致 Bluedroid 的 BTM (Bluetooth Manager) 安全管理模块未能为当前 `conn_id` 初始化与绑定有效的安全操作上下文。因此，当主端 Windows 发起 `LL_ENC_REQ` 加密请求时，ESP32 侧底层触发了 `BT_BTM: Device not found` 导致解密失败（MIC Failure / 0x3d），并将该失败归咎于 SMP 握手超时（rsn 102），从而在 flash 中自动删除了绑定。
+* **最终消解方案 (延迟 10 秒放行安全上下文)**:
+  不能彻底屏蔽 `esp_ble_set_encryption`，而是需要延迟调用它。
+  在 Wrapper 中，对于重连设备，我们使用一个 **10秒延时定时器** 延迟执行真实的 `__real_esp_ble_set_encryption`。
+  1. **给 Windows 充足时间**：这确保了连接建立后的前几秒内，从端绝对不会主动发送 Security Request。Windows 有充足时间主动发起主端加密并完成 LTK 握手。
+  2. **保留安全上下文初始化**：10秒后定时器触发，调用真实接口，使得 BTM 安全上下文得以在协议栈内部安全地更新/关联。由于此时链路通常早已加密完成，底层会安全忽略该冗余请求而不发起空中冲突。
+  3. **断连安全保护**：若在 10 秒内设备意外断连，则自动取消该定时器，防止野定时器触发崩溃。
 
 ---
 
@@ -83,3 +110,20 @@
   ble_hs_cfg.store_read_cb = my_store_read_cb;
   ble_hs_cfg.sync_cb = nimble_on_sync; // 回调挂载后置，防止被覆盖
   ```
+
+---
+
+## [v2.4-dual-mode-reconnect-fix] 双模安全重连验证版本 | 2026-06-19
+
+- **协议栈**: Bluedroid
+- **状态**: 经典 HFP + BLE 键盘双模共存，并且本端配置双 MAC（HFP使用物理 MAC，BLE使用静态随机 MAC）。
+- **目的**: 解决 Windows 侧对端 MAC 重叠引起的 NVS 绑定覆盖冲突，以实现稳定的双模自动回连。
+
+### 踩坑 1：回退至 Legacy Pairing 禁用 CTKD 后，LTK 仍被抹去 (key_mask 变 0x16)
+* **故障现象**: 在 Legacy Pairing 模式（`auth_req = ESP_LE_AUTH_BOND`）下，首次配对成功时 `key_mask = 0x63`。但 EN 重启设备后，`key_mask` 仍退化为 `0x16`，丢失了 `0x01`（`ESP_LE_KEY_PENC` 对端加密密钥 LTK），从而再次在连接瞬间因 `Device not found` 而导致 `rsn 0x3d` (MIC Failure) 删绑。
+* **原因分析**: 
+  即使我们成功关闭了 CTKD（没有派生 Link Key 和 LTK 互导），但是由于 Windows（对端）无论连接经典蓝牙还是连接 BLE 键盘，其发起连接的物理 MAC 均为相同的 `F4:4E:FC:14:3C:A7`。
+  在 Bluedroid 的内部 NVS 加载中，它读取的是全局配置文件下以对端 MAC 作为键的设备记录。由于这台设备同时注册了经典蓝牙 Link Key 与 BLE 配对项，Bluedroid 在反序列化加载时，依然发生了解析冲突，强行忽略或丢弃了 BLE 的对端 LTK。
+* **下一步探索方向**:
+  我们需要在经典蓝牙侧寻找避坑方案。如果经典蓝牙可以配置为“免配对保存”（在与 Windows 连接时仅使用临时 Security Key 而不在本端持久保存 Link Key），则 NVS 中将永远只有干净的 BLE `PENC`（LTK）记录，这也许是唯一既能保障双模又能保护 BLE 重连不被擦除的有效方法。
+

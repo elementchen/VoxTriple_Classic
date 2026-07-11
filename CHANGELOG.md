@@ -1,5 +1,15 @@
 # Changelog
 
+## v2.4-dual-mode-reconnect-fix (2026-06-19)
+
+> 双模共存（经典蓝牙 HFP 麦克风 + BLE 键盘）完美自动重连版本。设计了双本端 MAC 真假隔离方案，并通过将 BLE 配对参数调整为 Legacy Pairing（禁用 CTKD），成功消除了在对端 MAC 重合时引起的 NVS 绑定密钥覆盖与畸变 Bug。
+
+### 修复与优化
+- **双 MAC 精准物理隔离**：本端经典蓝牙 HFP 麦克风使用 efuse 真实物理 MAC 地址，BLE 键盘则通过微调物理 MAC 使用独立的静态随机 MAC 地址。规避了因本端 MAC 地址相同被 Windows 合并的冲突。
+- **回退至 Legacy Pairing 禁用 CTKD**：在 `ble_gatts_config.c` 中将配对要求设为 `ESP_LE_AUTH_BOND`。禁用跨传输层密钥派生（CTKD），从根本上消除了重启时对端 MAC 密钥的覆盖冲突，防止了 LTK (`PENC`) 的抹去（key_mask 不再畸变退化为 `0x89`），彻底消除了 MIC Failure 0x3d 引起的闪退与删绑故障。
+
+---
+
 ## v2.2-nimble-stable (2026-06-19)
 
 > 纯 NimBLE BLE 键盘完美自动秒连版本。解决了首次连接识别为 NIMBLE、冷置 LMP 自动断连、重启回连失效与启动卡死三大重连核心故障，为后续双模演进建立了可靠的设计基准。

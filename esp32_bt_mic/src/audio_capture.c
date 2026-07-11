@@ -95,7 +95,7 @@ esp_err_t audio_capture_stop(void)
 esp_err_t audio_capture_read(uint8_t *buf, size_t buf_len, size_t *bytes_read, uint32_t timeout_ms)
 {
     if (!s_started) return ESP_ERR_INVALID_STATE;
-    return i2s_read(I2S_NUM_0, buf, buf_len, bytes_read, portMAX_DELAY);
+    return i2s_read(I2S_NUM_0, buf, buf_len, bytes_read, pdMS_TO_TICKS(timeout_ms));
 }
 
 void audio_capture_deinit(void)

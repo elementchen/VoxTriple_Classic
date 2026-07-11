@@ -207,3 +207,16 @@ esp_err_t config_storage_load_sleep_mode(uint8_t *enabled)
     nvs_close(nvs_handle);
     return ret;
 }
+
+esp_err_t config_storage_clear_all(void)
+{
+    nvs_handle_t nvs_handle;
+    esp_err_t ret = nvs_open(NVS_NAMESPACE, NVS_READWRITE, &nvs_handle);
+    if (ret != ESP_OK) return ret;
+
+    ret = nvs_erase_all(nvs_handle);
+    if (ret == ESP_OK) nvs_commit(nvs_handle);
+    nvs_close(nvs_handle);
+    ESP_LOGI(TAG, "Config storage cleared successfully.");
+    return ret;
+}

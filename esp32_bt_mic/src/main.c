@@ -5,6 +5,7 @@
  */
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -14,13 +15,14 @@
 #include "driver/gpio.h"
 #include "sdkconfig.h"
 #include "esp_wifi.h"
+#include "nvs.h"
+#include "nvs_flash.h"
 
 #include "bt_init.h"
-#include "ble_gatts_config.h"
 #include "audio_capture.h"
 #include "button_handler.h"
 #include "config_storage.h"
-#include "ble_hid_keyboard.h"
+#include "classic_hidd.h"
 #include "bt_config.h"
 
 static const char *TAG = "MAIN";
@@ -51,6 +53,45 @@ void app_main(void)
     ESP_LOGI(TAG, "Step 2: Loading configuration...");
     config_storage_init();
 
+    /* Dump NVS bt_config namespace */
+    ESP_LOGI(TAG, "Dumping all NVS entries:");
+    nvs_iterator_t it = NULL;
+    esp_err_t err = nvs_entry_find("nvs", NULL, NVS_TYPE_ANY, &it);
+    if (err != ESP_OK || it == NULL) {
+        ESP_LOGI(TAG, "  No entries found in NVS partition 'nvs'");
+    }
+    while (it != NULL) {
+        nvs_entry_info_t info;
+        nvs_entry_info(it, &info);
+        ESP_LOGI(TAG, "  NS: %s, Key: %s, Type: 0x%02X", info.namespace_name, info.key, info.type);
+        err = nvs_entry_next(&it);
+        if (err != ESP_OK) {
+            it = NULL;
+        }
+    }
+
+    /* Read and print bt_cfg_key0 */
+    nvs_handle_t handle;
+    if (nvs_open("bt_config.conf", NVS_READONLY, &handle) == ESP_OK) {
+        size_t size = 0;
+        if (nvs_get_blob(handle, "bt_cfg_key0", NULL, &size) == ESP_OK && size > 0) {
+            char *buf = malloc(size + 1);
+            if (buf) {
+                if (nvs_get_blob(handle, "bt_cfg_key0", buf, &size) == ESP_OK) {
+                    buf[size] = '\0';
+                    ESP_LOGI(TAG, "Content of bt_cfg_key0 (size=%d):", size);
+                    /* Print in chunks if it is too long for ESP_LOG */
+                    for (int i = 0; i < size; i += 256) {
+                        printf("%.256s", buf + i);
+                    }
+                    printf("\n");
+                }
+                free(buf);
+            }
+        }
+        nvs_close(handle);
+    }
+
     /* Step 3: Initialize I2S microphone driver */
     ESP_LOGI(TAG, "Step 3: Initializing I2S microphone...");
 #if ENABLE_CLASSIC_BT_MIC
@@ -74,14 +115,9 @@ void app_main(void)
         ESP_LOGI(TAG, "WiFi disabled for power saving");
     }
 
-    /* Step 5a: Initialize BLE HID Keyboard first (registers its GATT callback) */
-    ESP_LOGI(TAG, "Step 5a: Initializing BLE HID Keyboard...");
-    ESP_ERROR_CHECK(ble_hid_keyboard_init());
-
-    /* Step 5b: Initialize BLE GATT server (overwrites callback with unified
-     * handler that dispatches to HID handler internally) */
-    ESP_LOGI(TAG, "Step 5b: Initializing BLE GATT server...");
-    ble_gatts_init();
+    /* Step 5: Initialize Classic BT HID Keyboard */
+    ESP_LOGI(TAG, "Step 5: Initializing Classic BT HID Keyboard...");
+    ESP_ERROR_CHECK(classic_hidd_init());
 
     /* Step 6: Initialize button handler */
     ESP_LOGI(TAG, "Step 6: Initializing button handler...");
@@ -95,7 +131,12 @@ void app_main(void)
     /* Restore INFO logging for debugging BT stack state and connection event flow. */
     esp_log_level_set("*", ESP_LOG_INFO);
     esp_log_level_set("BTN_HANDLER", ESP_LOG_DEBUG);
-    esp_log_level_set("BLE_GATTS", ESP_LOG_DEBUG);
+    esp_log_level_set("CLASSIC_HIDD", ESP_LOG_DEBUG);
+    esp_log_level_set("BT_BTM", ESP_LOG_DEBUG);
+    esp_log_level_set("BT_GAP", ESP_LOG_DEBUG);
+    esp_log_level_set("BT_HCI", ESP_LOG_DEBUG);
+    esp_log_level_set("BT_APPL", ESP_LOG_DEBUG);
+    esp_log_level_set("BT_BTC", ESP_LOG_DEBUG);
 
     /* Main task done - other tasks handle everything */
     while (1) {
