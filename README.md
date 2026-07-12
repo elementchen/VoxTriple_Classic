@@ -82,6 +82,13 @@ Status LED (录音状态指示灯) → ESP32:
 
 ## Setup & Flash Guide / 固件编译烧录
 
+> [!TIP]
+> **如果您是普通用户（不懂代码、未安装 Python 及 ESP-IDF 开发环境）**，请直接跳转阅读我们专门为您准备的傻瓜式：
+> 👉 **[新手固件烧录与更新指南 (docs/flash_guide_zh.md)](docs/flash_guide_zh.md)**。
+>
+> If you are a general user (not familiar with coding, terminal commands or ESP-IDF build tools), please read our beginner-friendly tutorial:
+> 👉 **[Firmware Flashing Guide (For Beginners)](docs/flash_guide_zh.md)**.
+
 ### 1. Initialize ESP-IDF Environment
 Ensure you have ESP-IDF v5.5.1 installed. Start your terminal (e.g. PowerShell) and run:
 确保您已安装 ESP-IDF v5.5.1。启动终端，执行：
