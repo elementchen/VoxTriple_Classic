@@ -1,19 +1,20 @@
 #!/usr/bin/env python3
 """VoxTriple — ESP32 BT Microphone Config (macOS)
 
-Shares ble_client.py and config_service.py with the Windows version.
+Shares spp_client.py, config_service.py with the Windows version.
 Keyboard I/O is Mac-specific (keyboard_io_mac.py).
+Wired config and OTA firmware flashing are handled via physical USB Serial.
 Requires Accessibility permission in System Settings for keyboard capture.
 """
 import sys, os, asyncio, logging, tkinter as tk
-from tkinter import ttk
+from tkinter import ttk, filedialog, messagebox
 
 # Import shared modules from sibling windows_app_python directory
 _shared = os.path.join(os.path.dirname(__file__), "..", "windows_app_python")
 if os.path.isdir(_shared):
     sys.path.insert(0, os.path.abspath(_shared))
 
-import ble_client
+import spp_client
 import config_service
 import keyboard_io_mac as keyboard_io
 
@@ -63,12 +64,13 @@ class VoxTripleApp:
     def __init__(self, root: tk.Tk):
         self.root = root
         self.root.title("VoxTriple — ESP32 BT Mic Config (macOS)")
-        self.root.geometry("640x620")
-        self.root.minsize(600, 560)
+        self.root.geometry("640x700")
+        self.root.minsize(600, 640)
 
-        self.ble = ble_client.BleClient()
-        self.ble.on_button_event = self._on_button_event
-        self.ble.on_status = self._on_status
+        # Connect via SPP Client (re-uses physical USB Serial /dev/cu.* under macOS)
+        self.spp = spp_client.SppClient()
+        self.spp.on_button_event = self._on_button_event
+        self.spp.on_status = self._on_status
 
         # Config
         self._cfg = config_service.load()
@@ -91,21 +93,19 @@ class VoxTripleApp:
         self._tx_power = self._cfg.get("tx_power", 4)
         self._sleep_mode = tk.BooleanVar(value=self._cfg.get("sleep_mode", True))
 
-        self._status_text = tk.StringVar(value="Searching for device...")
+        self._status_text = tk.StringVar(value="Disconnected / 未连接")
         self._last_event_text = tk.StringVar(value="None")
         self._connected = False
 
         self._build_ui()
 
-        # Auto-connect on startup if previously paired
-        if self._cfg.get("ble_address", 0):
-            root.after(500, lambda: _run_async(self._auto_connect()))
+        # Fill serial ports list on load
+        self.root.after(100, self._refresh_ports)
 
     # ── UI construction ───────────────────────────────────────────
     def _build_ui(self):
         pad = {"padx": 4, "pady": 2}
 
-        # 1. Setup Custom Visual Styling (Revert to clean Native theme with custom card bg)
         style = ttk.Style()
         
         BG_COLOR = "#f4f6f8"       # Soft light gray for general window background
@@ -133,26 +133,25 @@ class VoxTripleApp:
         
         # Configure Notebook and Tabs using native system frame shapes
         style.configure("TNotebook", background=BG_COLOR, borderwidth=0)
-        style.configure("TNotebook.Tab", 
-                        font=("Helvetica", 9, "bold"), 
-                        padding=[16, 6])
-        
-        style.map("TNotebook.Tab",
-                  foreground=[("selected", PRIMARY_COLOR), ("active", TEXT_COLOR)])
+        style.configure("TNotebook.Tab", font=("Helvetica", 9, "bold"), padding=[16, 6])
+        style.map("TNotebook.Tab", foreground=[("selected", PRIMARY_COLOR), ("active", TEXT_COLOR)])
 
         # --- 常驻顶部控制台: Connection & Monitoring (3 Rows Layout) ---
-        top_frame = ttk.LabelFrame(self.root, text="Device Status & Connection / 设备连接与状态监控", padding=10, style="Header.TLabelframe")
+        top_frame = ttk.LabelFrame(self.root, text="USB Serial Connection & Status / 串口连接与状态监控", padding=10, style="Header.TLabelframe")
         top_frame.pack(fill="x", padx=8, pady=4)
 
         # Line 1: Connection Controllers
         ctrl_row = ttk.Frame(top_frame, style="Header.TFrame")
         ctrl_row.pack(fill="x", pady=4)
         
-        self._pair_btn = ttk.Button(ctrl_row, text="Pair New / 蓝牙配对连接", command=self._scan_connect, takefocus=False)
-        self._pair_btn.pack(side="left", padx=4)
+        ttk.Label(ctrl_row, text="Serial Port / 串口:", font=("Helvetica", 9, "bold"), style="Header.TLabel").pack(side="left", padx=4)
+        self._port_combo = ttk.Combobox(ctrl_row, width=24, state="readonly")
+        self._port_combo.pack(side="left", padx=4)
         
-        self._disconn_btn = ttk.Button(ctrl_row, text="Disconnect / 断开", command=self._disconnect, takefocus=False)
-        self._disconn_btn.pack(side="left", padx=4)
+        self._conn_btn = ttk.Button(ctrl_row, text="Connect / 连接", command=self._toggle_connect, takefocus=False)
+        self._conn_btn.pack(side="left", padx=4)
+        
+        ttk.Button(ctrl_row, text="Refresh / 刷新", command=self._refresh_ports, takefocus=False).pack(side="left", padx=4)
 
         # Line 2: Status tags (HFP state & Audio link)
         status_row = ttk.Frame(top_frame, style="Header.TFrame")
@@ -163,6 +162,9 @@ class VoxTripleApp:
         
         self._audio_label = ttk.Label(status_row, text="Audio Link: --", font=("Helvetica", 9, "bold"), style="Header.TLabel")
         self._audio_label.pack(side="left", padx=8)
+        
+        self._version_label = ttk.Label(status_row, text="Firmware Version: --", font=("Helvetica", 9, "bold"), foreground="#2980b9", style="Header.TLabel")
+        self._version_label.pack(side="left", padx=8)
 
         # Line 3: System Status Prompt & Big Live Key monitoring display
         mon_row = ttk.Frame(top_frame, style="Header.TFrame")
@@ -220,32 +222,73 @@ class VoxTripleApp:
         ttk.Label(dev_row, text="Sleep Mode / 睡眠模式:", font=("Helvetica", 9, "bold")).pack(side="left", padx=(16, 4))
         ttk.Checkbutton(dev_row, text="Enabled / 启用", variable=self._sleep_mode, takefocus=False).pack(side="left")
 
-        # Action buttons
-        act_frame = ttk.Frame(tab_config)
-        act_frame.pack(pady=(6, 0))
-        ttk.Button(act_frame, text="Write to Device / 写入到设备", command=self._write_device, takefocus=False).pack(side="left", **pad)
-        ttk.Button(act_frame, text="Save Config / 存入配置文件", command=self._save_file, takefocus=False).pack(side="left", **pad)
-        ttk.Button(act_frame, text="Load Config / 读取配置文件", command=self._load_file, takefocus=False).pack(side="left", **pad)
+        # Action Button: Write mappings to physical keyboard
+        self._write_btn = ttk.Button(tab_config, text="Write to Keyboard / 写入到蓝牙键盘", command=self._write_device, takefocus=False)
+        self._write_btn.pack(pady=(4, 0), ipadx=20, ipady=4)
 
         # ==========================================
-        # TAB 2: Info & Guide (使用说明)
+        # TAB 2: Firmware OTA (固件升级冷更新)
+        # ==========================================
+        tab_ota = ttk.Frame(notebook, padding=6)
+        notebook.add(tab_ota, text="Firmware OTA / 固件升级")
+
+        ota_frame = ttk.LabelFrame(tab_ota, text="Firmware OTA Upgrade / 固件 OTA 升级", padding=12)
+        ota_frame.pack(fill="both", expand=True, padx=4, pady=4)
+        
+        # Line 1: Select local File (.bin)
+        ota_file_row = ttk.Frame(ota_frame)
+        ota_file_row.pack(fill="x", pady=6)
+        
+        self._ota_select_btn = ttk.Button(ota_file_row, text="Select / 选择 (.bin)", command=self._select_firmware, takefocus=False)
+        self._ota_select_btn.pack(side="left", padx=4)
+        
+        self._ota_path_var = tk.StringVar(value="")
+        self._ota_entry = ttk.Entry(ota_file_row, textvariable=self._ota_path_var, state="readonly")
+        self._ota_entry.pack(side="left", fill="x", expand=True, padx=4)
+        
+        # Line 2: Flash Action & Progressbar aligned side-by-side
+        ota_flash_row = ttk.Frame(ota_frame)
+        ota_flash_row.pack(fill="x", pady=10)
+        
+        self._ota_flash_btn = ttk.Button(ota_flash_row, text="Flash Firmware / 升级固件", command=self._start_ota, takefocus=False)
+        self._ota_flash_btn.pack(side="left", padx=4)
+        
+        self._ota_progress_var = tk.DoubleVar(value=0.0)
+        self._ota_progress = ttk.Progressbar(ota_flash_row, variable=self._ota_progress_var, maximum=100)
+        self._ota_progress.pack(side="left", fill="x", expand=True, padx=4)
+        
+        # Line 3: Status Details (Status on left, target bin version on right)
+        self._ota_status_text = tk.StringVar(value="Idle / 空闲")
+        self._ota_bin_ver_text = tk.StringVar(value="Selected Bin Version: --")
+        
+        ota_status_row = ttk.Frame(ota_frame)
+        ota_status_row.pack(fill="x", pady=4)
+        ttk.Label(ota_status_row, textvariable=self._ota_status_text, foreground="gray").pack(side="left", padx=4)
+        ttk.Label(ota_status_row, textvariable=self._ota_bin_ver_text, foreground="#16a085", font=("Helvetica", 9, "bold")).pack(side="right", padx=4)
+
+        # ==========================================
+        # TAB 3: Info & Guide (使用说明)
         # ==========================================
         tab_info = ttk.Frame(notebook, padding=6)
         notebook.add(tab_info, text="Info / 使用说明")
 
         info_frame = ttk.LabelFrame(tab_info, text="Instruction Guide / 操作指南", padding=12)
         info_frame.pack(fill="both", expand=True, padx=4, pady=4)
-        msg = ("• Click 'Capture' then press a physical key on your Mac keyboard to assign it.\n"
-               "• Modifiers (Ctrl, Shift, Option, Cmd) are combined and sent when you click 'Write to Device'.\n"
-               "• Configurations take effect immediately without reboot.\n"
-               "• The keyboard stores mappings locally and works standalone without this App.\n\n"
+        msg = ("• Connect your VoxTriple board to your Mac via a USB cable.\n"
+               "• Select the serial port (e.g. /dev/cu.usbserial-xxx) and click Connect.\n"
+               "• Click 'Capture' then press a physical key on your Mac keyboard to assign it.\n"
+               "• Modifiers (Ctrl, Shift, Option, Cmd) are combined and sent when you click 'Write'.\n"
+               "• Configuration mappings and device settings are written instantly (Hot Update).\n"
+               "• Firmware OTA update transfers in ~20 seconds using optimized hardware console links.\n\n"
                "• Keyboard capture requires Accessibility permission under macOS:\n"
                "  System Settings → Privacy & Security → Accessibility\n\n"
+               "• 通过 USB 数据线将 VoxTriple 开发板连接到您的 Mac 电脑。\n"
+               "• 选择对应的串口设备（如 /dev/cu.usbserial-xxx）并点击「Connect / 连接」。\n"
                "• 点击「Capture / 捕获」然后按下您电脑键盘上的实体按键来捕获。\n"
-               "• 勾选修饰键（Ctrl, Shift, Option, Cmd）后，点击「写入到设备」进行热更新。\n"
-               "• 键盘设备独立保存配置，日常工作无需开启此配置 App。\n\n"
+               "• 勾选修饰键（Ctrl, Shift, Option, Cmd）后，点击「写入到蓝牙键盘」进行热更新。\n"
+               "• 键盘设备独立保存按键配置，日常运行无需开启此配置 App。\n\n"
                "• 注意：Mac 端的键盘按键捕获需要您的系统提供辅助功能权限：\n"
-               "  系统设置 → 隐私与安全性 → 辅助功能，请将此应用添加并勾选允许。")
+               "  系统设置 → 隐私与安全性 → 辅助功能，请将此应用（终端）添加并勾选允许。")
         ttk.Label(info_frame, text=msg, foreground="#555555", font=("Helvetica", 9), justify="left").pack(anchor="nw", fill="both", expand=True)
 
         # Quit cleanup
@@ -303,103 +346,117 @@ class VoxTripleApp:
 
         keyboard_io.start_key_capture(on_key, self.root)
 
+    # ── Serial Port Operations ───────────────────────────────────
+    def _refresh_ports(self):
+        ports = spp_client.SppClient.list_ports()
+        combo_vals = [p["desc"] for p in ports]
+        self._port_combo["values"] = combo_vals
+        
+        last_port = self._cfg.get("device_address")
+        default_idx = 0
+        
+        if last_port:
+            for idx, p in enumerate(ports):
+                if p["port"] == last_port:
+                    default_idx = idx
+                    break
+                    
+        if combo_vals:
+            self._port_combo.current(default_idx)
+        else:
+            self._port_combo.set("")
+
+    def _toggle_connect(self):
+        if self._connected:
+            self._disconnect()
+        else:
+            sel = self._port_combo.get()
+            if not sel:
+                self._status_text.set("No serial port selected.")
+                return
+            port = sel.split(" ")[0]
+            self._status_text.set(f"Connecting to {port}…")
+            _run_async(self._do_connect(port))
+
+    async def _do_connect(self, port: str):
+        ok = await self.spp.connect(port)
+        if ok:
+            self._connected = True
+            self._cfg["device_address"] = port
+            config_service.save(self._cfg)
+            self.root.after(0, lambda: self._conn_btn.configure(text="Disconnect / 断开"))
+            self.root.after(0, lambda: self._status_text.set(f"Connected: {port}"))
+            
+            # Fetch device configuration cache
+            await self._fetch_device_config()
+        else:
+            self.root.after(0, lambda: self._status_text.set("Connection failed / 连接失败."))
+
+    def _disconnect(self):
+        if self._connected:
+            _run_async(self.spp.disconnect())
+        self._connected = False
+        self._conn_btn.configure(text="Connect / 连接")
+        self._status_text.set("Disconnected / 已断开.")
+        self._hfp_label.configure(text="HFP State: --")
+        self._audio_label.configure(text="Audio Link: --")
+        self._version_label.configure(text="Firmware Version: --")
+
+    async def _fetch_device_config(self):
+        self._status_text.set("Reading config from device...")
+        cfg = await self.spp.get_config()
+        if cfg:
+            self.root.after(0, lambda: self._status_text.set("Config fetched successfully."))
+            
+            # Update UI controls according to device config values
+            for i in range(4):
+                vk_val = cfg["buttons"][i]["vk"]
+                mod_val = cfg["buttons"][i]["mod"]
+                self._btn[i]["vk"].set(vk_val)
+                for mk, mask in _MOD_MASKS.items():
+                    self._btn[i]["mod_vars"][mk].set(bool(mod_val & mask))
+                self._update_display(i)
+                
+            self._tx_power = cfg["tx_power"]
+            self._tx_combo.current(self._tx_power)
+            self._sleep_mode.set(bool(cfg["sleep"]))
+            
+            fw_ver = cfg.get("version", "1.0.0")
+            self._version_label.configure(text=f"Firmware Version: {fw_ver}")
+        else:
+            self.root.after(0, lambda: self._status_text.set("Failed to read config from device."))
+
     def _on_tx_power_change(self, event):
         self._tx_power = self._tx_combo.current()
         if self._tx_power < 0:
             self._tx_power = 4
 
-    # ── BLE operations ────────────────────────────────────────────
-    def _scan_connect(self):
-        _run_async(self._do_scan_connect())
-
-    async def _do_scan_connect(self):
-        self._status_text.set("Scanning...")
-        addr = await ble_client.BleClient.scan()
-        if not addr:
-            self._status_text.set("ESP32_BT_MIC not found.")
-            return
-        self._status_text.set("Connecting...")
-        ok = await self.ble.connect(addr)
-        if ok:
-            self._connected = True
-            self._cfg["ble_address"] = int(addr.replace(":", ""), 16)
-            self._cfg["device_address"] = addr
-            config_service.save(self._cfg)
-            self._status_text.set(f"Connected: {addr}")
-            for i in range(4):
-                r = await self.ble.read_button_mapping(i)
-                if r:
-                    self._btn[i]["vk"].set(r[0])
-                    for mk, mask in _MOD_MASKS.items():
-                        self._btn[i]["mod_vars"][mk].set(bool(r[1] & mask))
-                    self._update_display(i)
-            tx = await self.ble.read_tx_power()
-            if tx is not None:
-                self._tx_power = tx
-                self._tx_combo.current(tx)
-            sl = await self.ble.read_sleep_mode()
-            if sl is not None:
-                self._sleep_mode.set(bool(sl))
-        else:
-            self._status_text.set("Connection failed.")
-
-    async def _auto_connect(self):
-        addr = await ble_client.BleClient.scan(5.0)
-        if addr:
-            ok = await self.ble.connect(addr)
-            if ok:
-                self._connected = True
-                self._status_text.set(f"Connected: {addr}")
-                for i in range(4):
-                    r = await self.ble.read_button_mapping(i)
-                    if r:
-                        self._btn[i]["vk"].set(r[0])
-                        for mk, mask in _MOD_MASKS.items():
-                            self._btn[i]["mod_vars"][mk].set(bool(r[1] & mask))
-                        self._update_display(i)
-                tx = await self.ble.read_tx_power()
-                if tx is not None:
-                    self._tx_power = tx
-                    self._tx_combo.current(tx)
-                sl = await self.ble.read_sleep_mode()
-                if sl is not None:
-                    self._sleep_mode.set(bool(sl))
-                return
-        self._status_text.set("Device not found. Click 'Pair New' or check power.")
-
-    def _disconnect(self):
-        _run_async(self.ble.disconnect())
-        self._connected = False
-        self._status_text.set("Disconnected.")
-
     def _write_device(self):
         if not self._connected:
-            self._status_text.set("BLE not connected.")
+            messagebox.showerror("Error / 错误", "Please connect to a serial port first!\n请先连上有线串口！")
             return
-        _run_async(self._do_write_device())
-
-    async def _do_write_device(self):
+        
+        self._status_text.set("Writing config to device...")
+        # Pack mappings
+        mapping = []
         for i in range(4):
             vk = self._btn[i]["vk"].get()
             mod = _build_modifier(self._btn[i]["mod_vars"])
-            ok = await self.ble.write_button_mapping(i, vk, mod)
-            if not ok:
-                self._status_text.set(f"Write btn{i+1} failed.")
-                return
-        ok_tx = await self.ble.write_tx_power(self._tx_power)
-        if not ok_tx:
-            self._status_text.set("Write TX power failed.")
-            return
-        ok_sl = await self.ble.write_sleep_mode(1 if self._sleep_mode.get() else 0)
-        if not ok_sl:
-            self._status_text.set("Write sleep mode failed.")
-            return
-        self._status_text.set("Settings written to device.")
-        addr = self.ble.address
-        prev = f"Connected: {addr}" if addr else "Ready."
-        self.root.after(3000, lambda p=prev: self._status_text.set(p))
+            mapping.append({"vk": vk, "mod": mod})
+            
+        sleep_val = 1 if self._sleep_mode.get() else 0
+        _run_async(self._do_write(mapping, self._tx_power, sleep_val))
 
-    def _save_file(self):
+    async def _do_write(self, mapping, tx, sleep):
+        ok = await self.spp.set_config(mapping, tx, sleep)
+        if ok:
+            self.root.after(0, lambda: self._status_text.set("Config written successfully!"))
+            # Auto-save local json copy
+            self._save_local_file()
+        else:
+            self.root.after(0, lambda: self._status_text.set("Write config failed / 写入失败."))
+
+    def _save_local_file(self):
         for i in range(4):
             key = f"button{i+1}"
             self._cfg[key] = {
@@ -409,55 +466,101 @@ class VoxTripleApp:
         self._cfg["tx_power"] = self._tx_power
         self._cfg["sleep_mode"] = self._sleep_mode.get()
         config_service.save(self._cfg)
-        self._status_text.set("Configuration saved to file.")
 
-    def _save_file(self):
-        for i in range(4):
-            key = f"button{i+1}"
-            self._cfg[key] = {
-                "vk_code": self._btn[i]["vk"].get(),
-                "modifier": _build_modifier(self._btn[i]["mod_vars"]),
-            }
-        self._cfg["tx_power"] = self._tx_power
-        self._cfg["sleep_mode"] = self._sleep_mode.get()
-        config_service.save(self._cfg)
-        self._status_text.set("Configuration saved to file.")
+    # ── Firmware OTA Flashing ─────────────────────────────────────
+    def _read_bin_version(self, bin_path: str) -> str:
+        try:
+            with open(bin_path, "rb") as f:
+                data = f.read(10240)  # Read first 10KB
+            magic = b"\x32\x54\xcd\xab"
+            idx = data.find(magic)
+            if idx != -1:
+                ver_bytes = data[idx + 16 : idx + 16 + 32]
+                if b"\x00" in ver_bytes:
+                    ver_bytes = ver_bytes.split(b"\x00")[0]
+                return ver_bytes.decode("utf-8", errors="ignore")
+        except Exception as e:
+            log.error(f"Failed to parse bin version: {e}")
+        return "Unknown"
 
-    def _load_file(self):
-        self._cfg = config_service.load()
-        for i in range(4):
-            key = f"button{i+1}"
-            b = self._cfg.get(key, {"vk_code": 0x0D, "modifier": 0})
-            self._btn[i]["vk"].set(b["vk_code"])
-            for mk, mask in _MOD_MASKS.items():
-                self._btn[i]["mod_vars"][mk].set(bool(b["modifier"] & mask))
-            self._update_display(i)
-        self._tx_power = self._cfg.get("tx_power", 4)
-        self._tx_combo.current(self._tx_power)
-        self._sleep_mode.set(self._cfg.get("sleep_mode", True))
-        self._status_text.set("Configuration loaded from file.")
+    def _select_firmware(self):
+        path = filedialog.askopenfilename(filetypes=[("Firmware binary", "*.bin")])
+        if path:
+            self._ota_path_var.set(path)
+            ver = self._read_bin_version(path)
+            self._ota_bin_ver_text.set(f"Selected Bin Version: {ver}")
 
-    # ── Button event (from BLE) ───────────────────────────────────
+    def _start_ota(self):
+        if not self._connected:
+            messagebox.showerror("Error / 错误", "Please connect to the device over USB serial first!\n请先连上有线串口！")
+            return
+        path = self._ota_path_var.get()
+        if not path or not os.path.exists(path):
+            messagebox.showerror("Error / 错误", "Please select a valid firmware (.bin) file!\n请先选择有效的 .bin 固件文件！")
+            return
+            
+        self._set_ui_state(tk.DISABLED)
+        self._ota_status_text.set("OTA Initializing...")
+        _run_async(self._do_ota(path))
+
+    def _set_ui_state(self, state):
+        self._ota_select_btn.configure(state=state)
+        self._ota_flash_btn.configure(state=state)
+        self._write_btn.configure(state=state)
+        self._conn_btn.configure(state=state)
+        self._port_combo.configure(state="readonly" if state == tk.NORMAL else state)
+        for btn in self._cap_btns:
+            if btn:
+                btn.configure(state=state)
+
+    async def _do_ota(self, bin_path):
+        def progress_cb(written, total):
+            pct = (written / total) * 100
+            self.root.after(0, lambda: self._ota_progress_var.set(pct))
+            self.root.after(0, lambda: self._ota_status_text.set(
+                f"Flashing: {written}/{total} bytes ({pct:.1f}%)"
+            ))
+
+        ok = await self.spp.upload_firmware(bin_path, progress_cb)
+        if ok:
+            self.root.after(0, lambda: messagebox.showinfo(
+                "Success / 成功", 
+                "Firmware OTA flash completed successfully!\n"
+                "The board is rebooting now. Please wait a few seconds and reconnect.\n\n"
+                "固件升级成功！开发板正在重新启动，请稍后重新刷新并连接串口。"
+            ))
+            self.root.after(0, lambda: self._disconnect())
+            self.root.after(0, lambda: self._ota_status_text.set("OTA Success! Rebooted."))
+        else:
+            self.root.after(0, lambda: messagebox.showerror(
+                "Error / 错误", 
+                "OTA Firmware flashing failed!\n固件升级失败！请重试。"
+            ))
+            self.root.after(0, lambda: self._ota_status_text.set("OTA Failed."))
+            
+        self.root.after(0, lambda: self._set_ui_state(tk.NORMAL))
+
+    # ── Callbacks (from Serial Client) ────────────────────────────
     def _on_button_event(self, btn_id: int, state: int):
         self.root.after(0, lambda: self._handle_button_event(btn_id, state))
 
     def _handle_button_event(self, btn_id: int, state: int):
-        s = "PRESSED" if state == 1 else "RELEASED"
+        s = "PRESSED / 按下" if state == 1 else "RELEASED / 松开"
         self._last_event_text.set(f"Button {btn_id + 1} {s}")
-        # Key input is handled by ESP32 BLE HID directly — no Python simulation needed.
 
     def _on_status(self, hfp: int, audio: int):
         self.root.after(0, lambda: self._handle_status(hfp, audio))
 
     def _handle_status(self, hfp: int, audio: int):
-        hfp_s = "Connected" if hfp else "--"
-        audio_s = "Active" if audio else "--"
+        hfp_s = "Connected / 已连接" if hfp else "--"
+        audio_s = "Active / 活跃" if audio else "--"
         self._hfp_label.configure(text=f"HFP: {hfp_s}")
         self._audio_label.configure(text=f"Audio: {audio_s}")
 
     def _on_close(self):
         keyboard_io.stop_key_capture()
-        _run_async(self.ble.disconnect())
+        if self._connected:
+            _run_async(self.spp.disconnect())
         stop_asyncio_loop()
         self.root.destroy()
 
