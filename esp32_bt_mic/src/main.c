@@ -23,6 +23,7 @@
 #include "button_handler.h"
 #include "config_storage.h"
 #include "classic_hidd.h"
+#include "uart_console.h"
 #include "bt_config.h"
 
 static const char *TAG = "MAIN";
@@ -118,6 +119,10 @@ void app_main(void)
     /* Step 5: Initialize Classic BT HID Keyboard */
     ESP_LOGI(TAG, "Step 5: Initializing Classic BT HID Keyboard...");
     ESP_ERROR_CHECK(classic_hidd_init());
+
+    /* Step 5b: Initialize Wired UART Console Config */
+    ESP_LOGI(TAG, "Step 5b: Initializing Wired UART Console Config...");
+    ESP_ERROR_CHECK(uart_console_init());
 
     /* Step 6: Initialize button handler */
     ESP_LOGI(TAG, "Step 6: Initializing button handler...");

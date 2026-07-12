@@ -19,6 +19,7 @@
 #include "config_storage.h"
 #include "bt_init.h"
 #include "esp_hf_client_api.h"
+#include "uart_console.h"
 #include "bt_config.h"
 
 static const char *TAG = "BTN_HANDLER";
@@ -114,6 +115,7 @@ static void button_task_func(void *arg)
                     state[i] = BTN_STATE_PRESSED;
                     press_time[i] = now;
                     ESP_LOGI(TAG, "Button %d pressed", i + 1);
+                    uart_console_send_event_btn(i, 1); // Notify PC over UART
 
                     /* Reset inactivity deep sleep timer */
                     if (s_inactivity_timer) xTimerReset(s_inactivity_timer, 0);
@@ -140,6 +142,10 @@ static void button_task_func(void *arg)
                 if (!pressed) {
                     uint32_t duration = now - press_time[i];
                     ESP_LOGI(TAG, "Button %d released (duration: %lu ms)", i + 1, duration);
+                    uart_console_send_event_btn(i, 0); // Notify PC over UART
+                    if (classic_hidd_is_connected()) {
+                        classic_hidd_release_key();
+                    }
 
                     /* Button 4 long press (> 3000ms) to clear all BT pairings & reset */
                     if (i == 3 && duration >= 3000) {

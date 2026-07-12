@@ -8,6 +8,9 @@ idf_component_register(SRCS "main.c"
                             "config_storage.c"
                             "ws2812_led.c"
                             "classic_hidd.c"
+                            "config_cmd.c"
+                            "uart_console.c"
                     PRIV_REQUIRES bt nvs_flash driver esp_ringbuf led_strip
-                                 esp_hid
-                    INCLUDE_DIRS ".")
+                                 esp_hid json app_update
+                    INCLUDE_DIRS "."
+                    WHOLE_ARCHIVE)

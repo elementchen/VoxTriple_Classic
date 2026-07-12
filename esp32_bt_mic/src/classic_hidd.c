@@ -304,14 +304,9 @@ void classic_hidd_send_key(uint8_t modifier, uint8_t key_code)
     hid_mod |= vk_to_hid_modifier(key_code);
     uint8_t hid_key = s_vk_to_hid[key_code];
     
-    // 1. Send Key Press report
+    // Send Key Press report only, do not auto-release here
     uint8_t report[8] = {hid_mod, 0, hid_key, 0, 0, 0, 0, 0};
     esp_bt_hid_device_send_report(ESP_HIDD_REPORT_TYPE_INTRDATA, 1, sizeof(report), report);
-
-    // 2. Delay briefly and send Key Release report to avoid repeating characters
-    vTaskDelay(pdMS_TO_TICKS(12));
-    uint8_t release_report[8] = {0};
-    esp_bt_hid_device_send_report(ESP_HIDD_REPORT_TYPE_INTRDATA, 1, sizeof(release_report), release_report);
 }
 
 void classic_hidd_release_key(void)

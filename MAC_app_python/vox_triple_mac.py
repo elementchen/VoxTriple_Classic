@@ -63,8 +63,8 @@ class VoxTripleApp:
     def __init__(self, root: tk.Tk):
         self.root = root
         self.root.title("VoxTriple — ESP32 BT Mic Config (macOS)")
-        self.root.geometry("620x820")
-        self.root.minsize(580, 780)
+        self.root.geometry("640x620")
+        self.root.minsize(600, 560)
 
         self.ble = ble_client.BleClient()
         self.ble.on_button_event = self._on_button_event
@@ -105,38 +105,109 @@ class VoxTripleApp:
     def _build_ui(self):
         pad = {"padx": 4, "pady": 2}
 
-        # Connection row
-        conn_frame = ttk.LabelFrame(self.root, text="Connection", padding=8)
-        conn_frame.pack(fill="x", padx=8, pady=4)
+        # 1. Setup Custom Visual Styling (Revert to clean Native theme with custom card bg)
+        style = ttk.Style()
+        
+        BG_COLOR = "#f4f6f8"       # Soft light gray for general window background
+        CARD_COLOR = "#ffffff"     # Clean white for tab pages and card containers
+        PRIMARY_COLOR = "#16a085"  # Teal highlight
+        TEXT_COLOR = "#2c3e50"
+        
+        self.root.configure(background=BG_COLOR)
+        
+        # Base global style overrides
+        style.configure(".", background=CARD_COLOR, foreground=TEXT_COLOR, fieldbackground=CARD_COLOR)
+        
+        # Dedicated Styles for header elements (must match base BG)
+        style.configure("Header.TLabelframe", background=BG_COLOR, bordercolor="#d5d8dc")
+        style.configure("Header.TLabelframe.Label", background=BG_COLOR, font=("Helvetica", 9, "bold"), foreground=TEXT_COLOR)
+        style.configure("Header.TFrame", background=BG_COLOR)
+        style.configure("Header.TLabel", background=BG_COLOR, foreground=TEXT_COLOR)
+        
+        # Tab content structures (white background)
+        style.configure("TLabelframe", background=CARD_COLOR, bordercolor="#e6ecef")
+        style.configure("TLabelframe.Label", background=CARD_COLOR, font=("Helvetica", 9, "bold"), foreground=PRIMARY_COLOR)
+        style.configure("TFrame", background=CARD_COLOR)
+        style.configure("TLabel", background=CARD_COLOR, foreground=TEXT_COLOR)
+        style.configure("TCheckbutton", background=CARD_COLOR, foreground=TEXT_COLOR)
+        
+        # Configure Notebook and Tabs using native system frame shapes
+        style.configure("TNotebook", background=BG_COLOR, borderwidth=0)
+        style.configure("TNotebook.Tab", 
+                        font=("Helvetica", 9, "bold"), 
+                        padding=[16, 6])
+        
+        style.map("TNotebook.Tab",
+                  foreground=[("selected", PRIMARY_COLOR), ("active", TEXT_COLOR)])
 
-        btn_frame = ttk.Frame(conn_frame)
-        btn_frame.pack(fill="x")
-        ttk.Button(btn_frame, text="Pair New", command=self._scan_connect).pack(side="left", **pad)
-        ttk.Button(btn_frame, text="Disconnect", command=self._disconnect).pack(side="left", **pad)
-        ttk.Label(conn_frame, textvariable=self._status_text, foreground="gray").pack(anchor="w", **pad)
+        # --- 常驻顶部控制台: Connection & Monitoring (3 Rows Layout) ---
+        top_frame = ttk.LabelFrame(self.root, text="Device Status & Connection / 设备连接与状态监控", padding=10, style="Header.TLabelframe")
+        top_frame.pack(fill="x", padx=8, pady=4)
 
-        status_sub = ttk.Frame(conn_frame)
-        status_sub.pack(fill="x")
-        self._hfp_label = ttk.Label(status_sub, text="HFP: --", font=("", 9, "bold"))
+        # Line 1: Connection Controllers
+        ctrl_row = ttk.Frame(top_frame, style="Header.TFrame")
+        ctrl_row.pack(fill="x", pady=4)
+        
+        self._pair_btn = ttk.Button(ctrl_row, text="Pair New / 蓝牙配对连接", command=self._scan_connect, takefocus=False)
+        self._pair_btn.pack(side="left", padx=4)
+        
+        self._disconn_btn = ttk.Button(ctrl_row, text="Disconnect / 断开", command=self._disconnect, takefocus=False)
+        self._disconn_btn.pack(side="left", padx=4)
+
+        # Line 2: Status tags (HFP state & Audio link)
+        status_row = ttk.Frame(top_frame, style="Header.TFrame")
+        status_row.pack(fill="x", pady=4)
+        
+        self._hfp_label = ttk.Label(status_row, text="HFP State: --", font=("Helvetica", 9, "bold"), style="Header.TLabel")
         self._hfp_label.pack(side="left", padx=8)
-        self._audio_label = ttk.Label(status_sub, text="Audio: --", font=("", 9, "bold"))
+        
+        self._audio_label = ttk.Label(status_row, text="Audio Link: --", font=("Helvetica", 9, "bold"), style="Header.TLabel")
         self._audio_label.pack(side="left", padx=8)
 
-        # 4 button groups
-        for i in range(4):
-            self._build_button_group(i)
+        # Line 3: System Status Prompt & Big Live Key monitoring display
+        mon_row = ttk.Frame(top_frame, style="Header.TFrame")
+        mon_row.pack(fill="x", pady=(4, 0))
+        
+        self._status_label = ttk.Label(mon_row, textvariable=self._status_text, foreground="gray", style="Header.TLabel")
+        self._status_label.pack(side="left", padx=4)
+        
+        evt_sub = ttk.Frame(mon_row, style="Header.TFrame")
+        evt_sub.pack(side="right", padx=4)
+        ttk.Label(evt_sub, text="Last Key Press / 最近按键: ", font=("Helvetica", 9, "bold"), foreground="#7f8c8d", style="Header.TLabel").pack(side="left")
+        
+        # Highlighted large text for instant feedback
+        self._live_evt_label = ttk.Label(evt_sub, textvariable=self._last_event_text, font=("Helvetica", 11, "bold"), foreground="#d35400", style="Header.TLabel")
+        self._live_evt_label.pack(side="left", padx=4)
 
-        # Last event
-        evt_frame = ttk.LabelFrame(self.root, text="Last Button Event", padding=8)
-        evt_frame.pack(fill="x", padx=8, pady=4)
-        ttk.Label(evt_frame, textvariable=self._last_event_text, font=("", 12, "bold")).pack()
+        # --- Notebook Container for Tabs ---
+        notebook = ttk.Notebook(self.root, padding=4, takefocus=False)
+        notebook.pack(fill="both", expand=True, padx=8, pady=4)
 
-        # Device Settings
-        dev_frame = ttk.LabelFrame(self.root, text="Device Settings", padding=8)
-        dev_frame.pack(fill="x", padx=8, pady=4)
+        # ==========================================
+        # TAB 1: Keyboard Config (键盘配置热更新)
+        # ==========================================
+        tab_config = ttk.Frame(notebook, padding=6)
+        notebook.add(tab_config, text="Keyboard Config / 按键与配置")
+
+        # 2x2 grid frame for 4 button configs
+        buttons_grid_frame = ttk.Frame(tab_config)
+        buttons_grid_frame.pack(fill="x", pady=2)
+        buttons_grid_frame.columnconfigure(0, weight=1)
+        buttons_grid_frame.columnconfigure(1, weight=1)
+
+        self._cap_btns = [None, None, None, None]
+        self._build_button_group(buttons_grid_frame, 0, 0, 0)
+        self._build_button_group(buttons_grid_frame, 1, 0, 1)
+        self._build_button_group(buttons_grid_frame, 2, 1, 0)
+        self._build_button_group(buttons_grid_frame, 3, 1, 1)
+
+        # Bottom row for Tab 1: Device general settings (TX power & sleep)
+        dev_frame = ttk.LabelFrame(tab_config, text="Device Settings / 设备设置", padding=8)
+        dev_frame.pack(fill="x", padx=4, pady=6)
+        
         dev_row = ttk.Frame(dev_frame)
         dev_row.pack(fill="x")
-        ttk.Label(dev_row, text="TX Power:", font=("", 9, "bold")).pack(side="left", padx=4)
+        ttk.Label(dev_row, text="TX Power / 发射功率:", font=("Helvetica", 9, "bold")).pack(side="left", padx=4)
         self._tx_combo = ttk.Combobox(dev_row, width=18,
                                 values=["0: -12 dBm (min)", "1: -9 dBm", "2: -6 dBm",
                                         "3: -3 dBm", "4: 0 dBm", "5: +3 dBm",
@@ -145,55 +216,69 @@ class VoxTripleApp:
         self._tx_combo.current(self._tx_power)
         self._tx_combo.bind("<<ComboboxSelected>>", self._on_tx_power_change)
         self._tx_combo.pack(side="left", padx=4)
-        ttk.Label(dev_row, text="Sleep Mode:", font=("", 9, "bold")).pack(side="left", padx=(16, 4))
-        ttk.Checkbutton(dev_row, text="Enabled", variable=self._sleep_mode).pack(side="left")
+        
+        ttk.Label(dev_row, text="Sleep Mode / 睡眠模式:", font=("Helvetica", 9, "bold")).pack(side="left", padx=(16, 4))
+        ttk.Checkbutton(dev_row, text="Enabled / 启用", variable=self._sleep_mode, takefocus=False).pack(side="left")
 
         # Action buttons
-        act_frame = ttk.Frame(self.root)
-        act_frame.pack(pady=8)
-        ttk.Button(act_frame, text="Write to Device", command=self._write_device).pack(side="left", **pad)
-        ttk.Button(act_frame, text="Save to File", command=self._save_file).pack(side="left", **pad)
-        ttk.Button(act_frame, text="Load from File", command=self._load_file).pack(side="left", **pad)
+        act_frame = ttk.Frame(tab_config)
+        act_frame.pack(pady=(6, 0))
+        ttk.Button(act_frame, text="Write to Device / 写入到设备", command=self._write_device, takefocus=False).pack(side="left", **pad)
+        ttk.Button(act_frame, text="Save Config / 存入配置文件", command=self._save_file, takefocus=False).pack(side="left", **pad)
+        ttk.Button(act_frame, text="Load Config / 读取配置文件", command=self._load_file, takefocus=False).pack(side="left", **pad)
 
-        # Info
-        info = ttk.LabelFrame(self.root, text="Info", padding=8)
-        info.pack(fill="both", expand=True, padx=8, pady=4)
-        msg = ("BLE Service: 0x1820 | Device: ESP32_BT_MIC\n"
-               "Click 'Capture Key' then press any key to assign it.\n"
-               "Modifier checkboxes apply on Write to Device.\n"
-               "Hold Button 1 on ESP32 to PTT (push-to-talk).\n\n"
-               "Keyboard capture requires Accessibility permission.\n"
-               "System Settings → Privacy & Security → Accessibility")
-        ttk.Label(info, text=msg, foreground="gray", font=("", 9)).pack(anchor="w")
+        # ==========================================
+        # TAB 2: Info & Guide (使用说明)
+        # ==========================================
+        tab_info = ttk.Frame(notebook, padding=6)
+        notebook.add(tab_info, text="Info / 使用说明")
 
-        # Mac: Quit properly via Cmd+Q / menu
+        info_frame = ttk.LabelFrame(tab_info, text="Instruction Guide / 操作指南", padding=12)
+        info_frame.pack(fill="both", expand=True, padx=4, pady=4)
+        msg = ("• Click 'Capture' then press a physical key on your Mac keyboard to assign it.\n"
+               "• Modifiers (Ctrl, Shift, Option, Cmd) are combined and sent when you click 'Write to Device'.\n"
+               "• Configurations take effect immediately without reboot.\n"
+               "• The keyboard stores mappings locally and works standalone without this App.\n\n"
+               "• Keyboard capture requires Accessibility permission under macOS:\n"
+               "  System Settings → Privacy & Security → Accessibility\n\n"
+               "• 点击「Capture / 捕获」然后按下您电脑键盘上的实体按键来捕获。\n"
+               "• 勾选修饰键（Ctrl, Shift, Option, Cmd）后，点击「写入到设备」进行热更新。\n"
+               "• 键盘设备独立保存配置，日常工作无需开启此配置 App。\n\n"
+               "• 注意：Mac 端的键盘按键捕获需要您的系统提供辅助功能权限：\n"
+               "  系统设置 → 隐私与安全性 → 辅助功能，请将此应用添加并勾选允许。")
+        ttk.Label(info_frame, text=msg, foreground="#555555", font=("Helvetica", 9), justify="left").pack(anchor="nw", fill="both", expand=True)
+
+        # Quit cleanup
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
-        self.root.createcommand("tkAboutDialog", lambda: None)  # suppress default About
 
-    def _build_button_group(self, i: int):
+    def _build_button_group(self, parent_frame, i: int, row: int, col: int):
         b = self._btn[i]
-        group = ttk.LabelFrame(self.root, text=f"Button {i+1}", padding=8)
-        group.pack(fill="x", padx=8, pady=2)
+        group = ttk.LabelFrame(parent_frame, text=f"Button {i+1}", padding=6)
+        group.grid(row=row, column=col, padx=6, pady=4, sticky="nsew")
 
         key_row = ttk.Frame(group)
-        key_row.pack(fill="x")
-        ttk.Label(key_row, text="Key:", width=5, font=("", 9, "bold")).pack(side="left")
-        ttk.Label(key_row, textvariable=b["display"], width=18, relief="sunken", background="#f0f0f0").pack(side="left", padx=4)
-        self._cap_btns = getattr(self, "_cap_btns", [None, None, None, None])
-        btn = ttk.Button(key_row, text="Capture Key",
-                         command=lambda idx=i: self._begin_capture(idx))
+        key_row.pack(fill="x", pady=2)
+        ttk.Label(key_row, text="Key:", width=5, font=("Helvetica", 9, "bold")).pack(side="left")
+        ttk.Label(key_row, textvariable=b["display"], width=13, relief="sunken", background="#f0f0f0").pack(side="left", padx=4)
+        
+        btn = ttk.Button(key_row, text="Capture / 捕获", command=lambda idx=i: self._begin_capture(idx), takefocus=False)
         btn.pack(side="left", padx=4)
-        if not hasattr(self, "_cap_btns"):
-            self._cap_btns = [None, None, None, None]
         self._cap_btns[i] = btn
 
         mod_frame = ttk.Frame(group)
         mod_frame.pack(fill="x", pady=2)
-        ttk.Label(mod_frame, text="Modifiers:", font=("", 9, "bold")).pack(side="left")
-        for mk, mask in _MOD_MASKS.items():
-            label = {"lc": "LCtrl", "ls": "LShift", "la": "LOption", "lw": "LCmd",
-                     "rc": "RCtrl", "rs": "RShift", "ra": "ROption", "rw": "RCmd"}[mk]
-            ttk.Checkbutton(mod_frame, text=label, variable=b["mod_vars"][mk]).pack(side="left", padx=2)
+        
+        mod_row1 = ttk.Frame(mod_frame)
+        mod_row1.pack(fill="x")
+        for mk in ["lc", "ls", "la", "lw"]:
+            label = {"lc": "Ctrl", "ls": "Shift", "la": "Option", "lw": "Cmd"}[mk]
+            ttk.Checkbutton(mod_row1, text=label, variable=b["mod_vars"][mk], takefocus=False).pack(side="left", padx=2)
+            
+        mod_row2 = ttk.Frame(mod_frame)
+        mod_row2.pack(fill="x", pady=(2, 0))
+        for mk in ["rc", "rs", "ra", "rw"]:
+            label = {"rc": "RCtrl", "rs": "RShift", "ra": "ROption", "rw": "RCmd"}[mk]
+            ttk.Checkbutton(mod_row2, text=label, variable=b["mod_vars"][mk], takefocus=False).pack(side="left", padx=2)
 
     # ── Display update ────────────────────────────────────────────
     def _update_display(self, idx: int):
@@ -205,6 +290,7 @@ class VoxTripleApp:
     def _begin_capture(self, idx: int):
         for i, b in enumerate(self._btn):
             b["capturing"] = (i == idx)
+        self._cap_btns[idx].configure(text="Capturing... / 捕获中...")
         self._status_text.set(f"Capturing key for Button {idx+1}… Press a key.")
 
         def on_key(vk: int, _ext, _sc):
@@ -212,6 +298,7 @@ class VoxTripleApp:
                 self._btn[idx]["vk"].set(vk)
                 self._update_display(idx)
             self._status_text.set("Key captured.")
+            self._cap_btns[idx].configure(text="Capture / 捕获")
             keyboard_io.stop_key_capture()
 
         keyboard_io.start_key_capture(on_key, self.root)
@@ -311,6 +398,18 @@ class VoxTripleApp:
         addr = self.ble.address
         prev = f"Connected: {addr}" if addr else "Ready."
         self.root.after(3000, lambda p=prev: self._status_text.set(p))
+
+    def _save_file(self):
+        for i in range(4):
+            key = f"button{i+1}"
+            self._cfg[key] = {
+                "vk_code": self._btn[i]["vk"].get(),
+                "modifier": _build_modifier(self._btn[i]["mod_vars"]),
+            }
+        self._cfg["tx_power"] = self._tx_power
+        self._cfg["sleep_mode"] = self._sleep_mode.get()
+        config_service.save(self._cfg)
+        self._status_text.set("Configuration saved to file.")
 
     def _save_file(self):
         for i in range(4):

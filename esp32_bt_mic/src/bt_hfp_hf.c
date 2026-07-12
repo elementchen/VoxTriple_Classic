@@ -26,6 +26,7 @@
 #include "bt_init.h"
 #include "config_storage.h"
 #include "audio_capture.h"
+#include "uart_console.h"
 #include "osi/allocator.h"
 
 /* --- Local BTM power-mode API (internal, not in public headers) --- */
@@ -235,7 +236,7 @@ static void bt_app_send_data_task(void *arg)
                 // Print the first 6 bytes of samples every ~250ms to diagnose if I2S data is all zeros
                 static int print_cnt = 0;
                 if (++print_cnt % 50 == 0) {
-                    ESP_LOGI("AUDIO_DIAG", "I2S raw data: %02x %02x %02x %02x %02x %02x (read=%d)",
+                    ESP_LOGD("AUDIO_DIAG", "I2S raw data: %02x %02x %02x %02x %02x %02x (read=%d)",
                              buf[0], buf[1], buf[2], buf[3], buf[4], buf[5], (int)bytes_read);
                 }
 
@@ -244,7 +245,7 @@ static void bt_app_send_data_task(void *arg)
                 // Log I2S read failures or timeouts
                 static int err_cnt = 0;
                 if (++err_cnt % 50 == 0) {
-                    ESP_LOGE("AUDIO_DIAG", "I2S read failed/timeout: ret=%d (%s), read=%d",
+                    ESP_LOGD("AUDIO_DIAG", "I2S read failed/timeout: ret=%d (%s), read=%d",
                              ret, esp_err_to_name(ret), (int)bytes_read);
                 }
             }
@@ -439,6 +440,7 @@ void bt_app_hf_client_cb(esp_hf_client_cb_event_t event, esp_hf_client_cb_param_
 
         bool connected = (param->conn_stat.state == ESP_HF_CLIENT_CONNECTION_STATE_SLC_CONNECTED);
         bt_hfp_set_connected(connected);
+        uart_console_send_event_status(connected, bt_audio_is_active());
 
         if (connected) {
             ESP_LOGI(TAG, "SLC connected, starting audio pipeline");
@@ -475,11 +477,13 @@ void bt_app_hf_client_cb(esp_hf_client_cb_event_t event, esp_hf_client_cb_param_
 
             bt_audio_set_active(true);
             gpio_set_level(GPIO_NUM_18, 1); // Turn indicator LED ON when mic/SCO is active
+            uart_console_send_event_status(bt_hfp_is_connected(), true);
 
         } else if (param->audio_stat.state == ESP_HF_CLIENT_AUDIO_STATE_DISCONNECTED) {
             ESP_LOGI(TAG, "Audio disconnected");
             bt_audio_set_active(false);
             gpio_set_level(GPIO_NUM_18, 0); // Turn indicator LED OFF when mic/SCO is inactive
+            uart_console_send_event_status(bt_hfp_is_connected(), false);
 
             /* Unregister data callbacks — pipeline keeps running */
             esp_hf_client_register_data_callback(NULL, NULL);

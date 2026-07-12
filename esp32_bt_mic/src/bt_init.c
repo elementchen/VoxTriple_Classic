@@ -18,7 +18,6 @@
 #include "esp_bt_device.h"
 #include "esp_gap_bt_api.h"
 #include "esp_hf_client_api.h"
-#include "esp_gap_ble_api.h"
 #include "esp_mac.h"
 #include "bt_init.h"
 #include "bt_app_core.h"
