@@ -1,13 +1,26 @@
-# Build outputs
-**/bin/
-**/obj/
-**/publish/
-**/.pio/
-Serial_Log/
-*.pdb
-__pycache__/
-*.pyc
-*.egg-info/
-**/dist/
+# ESP-IDF build output & configurations
 **/build/
+**/sdkconfig
+**/sdkconfig.old
+**/.local/
+
+# Python packaging & virtual environments
+**/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+ENV/
 *.spec
+**/dist/
+
+# Executable & Debug build leftovers
+**/*.pdb
+**/*.exe
+_Archive/windows_app_csharp/
+
+# Logs & diagnostic caches
+Serial_Log/
+*.log

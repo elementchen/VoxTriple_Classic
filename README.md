@@ -1,44 +1,46 @@
-# VoxTriple — ESP32 3-Button Bluetooth PTT Microphone<br/>ESP32 三键蓝牙 PTT 麦克风
+# VoxTriple — ESP32 Bluetooth HID Keyboard & HFP Microphone System<br/>ESP32 蓝牙 HID 键盘与 HFP 麦克风系统
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![PlatformIO](https://img.shields.io/badge/build-PlatformIO-orange.svg)](https://platformio.org/)
-[![.NET](https://img.shields.io/badge/app-.NET%208-purple.svg)](https://dotnet.microsoft.com/)
+[![Build](https://img.shields.io/badge/build-ESP--IDF%205.5-blue.svg)](https://docs.espressif.com/projects/esp-idf/en/stable/esp32/index.html)
+[![Python](https://img.shields.io/badge/app-Python%203-green.svg)](https://www.python.org/)
 
-> An ESP32-based Bluetooth microphone system with three physical buttons: programmable keyboard shortcuts. Button 1 also drives a simple GPIO indicator LED. Designed for Windows voice input.
+> An ESP32-based multi-mode Bluetooth system providing a classic Bluetooth HID Keyboard and an HFP Hands-Free Client (Microphone) simultaneously. Includes programmable key mapping, wired ultra-fast OTA updating, and modern native companion apps for Windows and macOS.
 >
-> 基于 ESP32 的蓝牙麦克风系统。三键物理按钮均可编程为键盘快捷键，Button 1 同时驱动 GPIO 指示灯。专为 Windows 语音输入（语音识别 / 讯飞）设计。
+> 基于 ESP32 的多模蓝牙系统。同时拉起经典蓝牙 HID 键盘与 HFP 免提客户端（麦克风）双重角色。支持自定义按键映射配置、20秒极速有线 OTA 升级机制，并配套提供适用于 Windows 和 macOS 的现代原生配置客户端。
 
 ----
 
 ## Features / 功能特性
 
-- **Bluetooth Microphone** — ESP32 acts as an HFP Hands-Free Client. Windows recognizes it natively as a Bluetooth audio input device. No driver needed.
+- **Dual-Profile Bluetooth** — Act as a Bluetooth HID Keyboard and an HFP Hands-Free Client simultaneously. Windows and macOS recognize it natively as a keyboard and an audio input device. No drivers needed.
   
-  **蓝牙麦克风** — ESP32 扮演 HFP Hands-Free Client 角色，Windows 原生识别为蓝牙音频输入设备，免驱即用。
+  **双模蓝牙共存** — 同时扮演经典蓝牙 HID 键盘与 HFP 免提客户端（麦克风）双重 Profile。系统原生免驱识别为音频输入设备与实体键盘。
 
-- **Indicator LED** — Button 1 drives a simple GPIO LED on GPIO 26. Press to light up, release to turn off.
+- **Teal Visual & Dotted Focus-Free UI** — Sleek card-layout desktop companion applications designed in native Python Tkinter. 100% free of dotted focus rings and fully integrated with OS style behaviors.
+  
+  **卡片式无虚线原生 UI** — 基于 Python Tkinter 匠心设计的卡片式配置客户端，彻底铲除点击时难看的焦点虚线框，完美融合系统原生外观（提供直观的蓝色勾选框 ☒ 交互）。
 
-  **指示灯** — Button 1 驱动 GPIO 指示灯（GPIO 26）。按下点亮，松开熄灭。
+- **20s Ultra-Fast Wired OTA** — Dedicated C-level hardware console driver registry bypassing VFS serial line filters. Transfers `.bin` firmware data lossless in 1024-byte aligned blocks. OTA upgrade completes in 20-30 seconds with automatic verification and soft reboot.
+  
+  **20秒极速有线 OTA** — 固件端注册硬件级串口中断驱动并进行重定向，100% 物理绕过 VFS 的控制字符拦截（防止 `Ctrl+C` 等引起字节丢失）。支持 1024 字节大块对齐与硬件级自动冲刷校验，20秒闪电完成升级并自动重启。
 
-- **Programmable Shortcuts** — All 3 buttons can be mapped to any Windows key combination including modifiers (Ctrl / Shift / Alt / Win). Configurable wirelessly.
+- **Version-Stamped Releases** — Build system automatically extracts the firmware version during build time and duplicates a version-stamped binary (e.g., `esp32_bt_mic_v1.0.3.bin`) to prevent compiler overwrites.
+  
+  **版本自动命名** — 编译时自动从代码中提取当前版本号，在 `build/` 目录下复制出一份带有版本戳的固件（如 `esp32_bt_mic_v1.0.3.bin`），防止重复编译覆盖，方便 GitHub Releases 归档。
 
-  **可编程快捷键** — 3 个按钮均可映射任意键盘组合键（含 Ctrl/Shift/Alt/Win 修饰键），通过 BLE 无线配置。
+- **Cross-Platform Config Apps** — 
+  - **Windows App**: Communication via Bluetooth SPP Serial (COM), featuring live physical key press monitor with highlight colors.
+  - **macOS App**: Control over Bluetooth BLE GATT, using Apple Accessibility features to capture keystrokes.
+  
+  **跨平台配置客户端** —
+  - **Windows 客户端**: 通过经典蓝牙虚拟串口（SPP COM）有线/无线通信，内置大字号物理按键按下事件监控器。
+  - **macOS 客户端**: 通过 BLE GATT 无线修改键值，联动 macOS 系统辅助功能进行键值捕获。
 
-- **BLE Wireless Config** — A companion Windows WPF app reads and writes button mappings over BLE GATT in real time. No need to reflash the ESP32 to change shortcuts.
+- **mSBC Wideband Speech** — 16 kHz wideband speech pipeline with DSP audio processing (moving average + high-pass filtering). Realizes telephone-grade crisp speech input.
+  
+  **mSBC 宽带语音** — 16kHz 采样率的高清录音通道，内置 DSP 算法（滑动平均降噪 + 高通滤波滤除低频杂音）。提供高清晰度的语音输入。
 
-  **BLE 无线配置** — Windows WPF 配置应用通过 BLE GATT 实时读写按钮映射。改快捷键不需要重新烧录 ESP32。
-
-- **Auto-start & Auto-connect** — The Windows app optionally starts with Windows, then automatically scans for and reconnects BLE. Classic Bluetooth (HFP) reconnects automatically after the first pairing.
-
-  **开机自动连接** — Windows 应用可设置为开机自启动，启动后自动扫描并连接 BLE。经典蓝牙（HFP）首次配对后自动重连。
-
-- **mSBC Wideband Speech** — 16 kHz sampling with on-device noise-reduction DSP (high-pass filter + moving average). Clean voice input at telephone-grade quality.
-
-  **mSBC 宽带语音** — 16kHz 采样，板载降噪 DSP（高通滤波 + 滑动平均）。提供电话级清晰度的语音输入。
-
-- **Single-file EXE** — The Windows app can be published as a single standalone `.exe` with no DLL dependencies.
-
-  **单文件 EXE** — Windows 应用可发布为单个 `.exe` 文件，无需附带任何 DLL。
+---
 
 ## Hardware / 硬件清单
 
@@ -46,8 +48,10 @@
 |---------------|-----------|---------|
 | Dev Board 开发板 | NodeMCU-32S (ESP32-WROOM-32) | 1 |
 | Microphone 麦克风 | INMP441 MEMS I2S module | 1 |
-| Buttons 按钮 | 6×6mm tactile switch / 轻触开关 | 3 |
-| Capacitor (optional) 电容(可选) | 100nF ceramic for hardware noise reduction / 瓷片电容用于硬件降噪 | 1 |
+| Buttons 按钮 | 6×6mm tactile switch / 轻触开关 | 4 |
+| LED 指示灯 | Blue LED / 蓝色 3mm 发光二极管 | 1 |
+
+---
 
 ## Wiring / 接线说明
 
@@ -64,134 +68,126 @@ Buttons (按键) → ESP32:
   Button 1 → GPIO 4     Key 1 (Default: Enter / 回车)
   Button 2 → GPIO 16    Key 2 (Default: Esc / 退出)
   Button 3 → GPIO 19    Key 3 (Default: Space / 空格)
-  Button 4 → GPIO 23    Key 4 (Default: Tab / 制表键) [长按3秒清除绑定并重启]
+  Button 4 → GPIO 23    Key 4 (Default: Tab / 制表键) [长按 3 秒擦除蓝牙绑定并重启]
 
 Status LED (录音状态指示灯) → ESP32:
-  Anode (正极)   → GPIO 18    via a 220Ω current-limiting resistor / 经 220Ω 限流电阻
+  Anode (正极)   → GPIO 18    Connect a 220Ω current-limiting resistor / 经 220Ω 限流电阻接 GPIO
   Cathode (负极) → GND
 
 * All buttons are active-low (GPIO → Button → GND) with internal pull-up enabled.
 * 所有按键均为低电平有效，接线方式为 GPIO 引脚接按键再到 GND，使用内部上拉。
 ```
 
-## Quick Start / 快速开始
+---
 
-### 1. Build & Flash Firmware / 编译烧录固件
+## Setup & Flash Guide / 固件编译烧录
 
-```bash
-pip install platformio
+### 1. Initialize ESP-IDF Environment
+Ensure you have ESP-IDF v5.5.1 installed. Start your terminal (e.g. PowerShell) and run:
+确保您已安装 ESP-IDF v5.5.1。启动终端，执行：
+
+```powershell
+$env:IDF_PATH="C:\Espressif\frameworks\esp-idf-v5.5.1"
+. C:\Espressif\Initialize-Idf.ps1
+```
+
+### 2. Build & Flash
+Navigate to the `esp32_bt_mic` workspace. Build and flash target hardware at a highly stable **115200** baud rate to isolate potential channel line noise:
+切换至 `esp32_bt_mic` 文件夹。为了彻底隔离阻抗线路噪声，建议使用 **115200** 稳定波特率进行烧写：
+
+```powershell
 cd esp32_bt_mic
-pio run -t upload --upload-port COM4
+# Build project
+idf.py build
+
+# Flash at 115200 baud
+idf.py -p COM5 -b 115200 flash
 ```
 
-### 2. Pair Bluetooth / 蓝牙配对
+---
 
-Open Windows Bluetooth settings → Add device → look for `ESP32_BT_MIC_XX` (where `XX` is the last two hex digits of the board's MAC address) → pairing is automatic via SSP
+## Configuration Apps Guide / 配置客户端使用说明
 
-打开 Windows 蓝牙设置 → 添加设备 → 搜索 `ESP32_BT_MIC_XX`（`XX` 为板子 MAC 地址末两位十六进制）→ SSP 自动配对，无需输入配对码
+### 1. Windows Companion App (SPP 有线/无线)
+Located under `windows_app_python/`. Runs natively on Python 3.
+位于 `windows_app_python/` 目录下，基于 Python 3。
 
-### 3. Build & Run Config App / 编译运行配置应用
+#### Requirements & Setup
+```powershell
+cd windows_app_python
+pip install -r requirements.txt
+python vox_triple.py
+```
 
+#### standalone EXE compilation
+We support compiling the app into a single standalone, DLL-free `.exe` file. Install `PyInstaller` and compile:
+本客户端支持一键打包为独立的免依赖 `.exe` 应用程序。执行以下指令完成编译：
+
+```powershell
+pip install pyinstaller
+pyinstaller --noconfirm --onefile --windowed --name="VoxTripleConfig" vox_triple.py
+# Output path / 输出目录: windows_app_python/dist/VoxTripleConfig.exe
+```
+
+#### App Tabs Details
+- **Keyboard Config (键盘配置)**: Key mapping, TX power levels, and sleep toggles. Apply configuration wirelessly or via USB instantly (Hot Update).
+- **Firmware OTA (固件升级)**: Double-row aligned OTA interface. Select a target bin file, view extracted version numbers, and click to update.
+- **Info (说明书)**: Built-in help and user manual.
+
+---
+
+### 2. macOS Companion App (BLE GATT 无线)
+Located under `MAC_app_python/`. Controls the device completely over Bluetooth low energy.
+位于 `MAC_app_python/` 目录下，直接通过低功耗蓝牙无线改键。
+
+#### Setup
 ```bash
-cd windows_app
-dotnet run --project Esp32BtMicConfig
+cd MAC_app_python
+pip install -r requirements.txt
+python3 vox_triple_mac.py
 ```
 
-To produce a single-file `.exe` （打包为单文件 EXE）:
+> [!IMPORTANT]
+> macOS keypress hook requires **Accessibility Permission** in macOS system settings:
+>
+> macOS 下键盘按键捕获需要您开启**系统辅助功能权限**：
+> `系统设置` → `隐私与安全性` → `辅助功能`，添加终端或此程序并允许。
 
-```bash
-cd windows_app/Esp32BtMicConfig
-dotnet publish -r win-x64 -c Release -p:PublishSingleFile=true --self-contained false -o publish
-# Output / 输出: publish/Esp32BtMicConfig.exe (~25 MB)
-```
+---
 
-### 4. Daily Use / 日常使用
-
-1. **Bluetooth Pairing (蓝牙配对)**: Pair the device `ESP32_BT_KBD_MIC_XX` from Windows settings. The keyboard profile and microphone profile are both configured automatically.
-   打开 Windows 蓝牙设置配对 `ESP32_BT_KBD_MIC_XX`。配对成功后，蓝牙键盘与麦克风设备都将由系统自动安装并就绪。
-2. **Keyboard Config (快捷键改键配置)**: Open the Windows companion WPF app. It automatically connects over BLE and allows mapping Buttons 1-4 to any Virtual-Key codes or modifiers.
-   打开 Windows WPF 配置应用。它会自动通过 BLE 连接开发板，并允许为按键 1-4 映射任意的键盘键码及修饰键组合。
-3. **Always-On Mic (免按键常开麦克风)**: The microphone channel (SCO) connects automatically whenever the device pairs/reconnects. You can speak instantly into Windows Speech Recognition or voice input apps without pressing physical buttons. The status LED (GPIO 18) stays solid while recording.
-   设备连入电脑后，麦克风（SCO 通道）会自动发起连接并保持常开。您可以直接使用 Windows 语音输入或各类语音软件，无需物理按压任何按键。录音时状态指示灯（GPIO 18）常亮。
-4. **Physical Keypress Reconnect (随点随连)**: If you restart the ESP32 or lose connection, press **any of the 4 buttons** to trigger a fast reconnect to the host.
-   当开发板重启或发生断连时，**按下 1-4 键的任意一个键**，都会在后台立即向电脑发起重连呼叫，保障键盘和麦克风快速连回。
-5. **Reset Pairing (重置配对)**: Hold **Button 4** for 3 seconds to clear paired links and reset configurations to default.
-   长按 **按键 4** 达 3 秒即可自动擦除已配对的蓝牙主机信息并恢复出厂设置。
-
-## Project Structure / 项目结构
+## Project Directory Structure / 项目结构
 
 ```
 VoxTriple/
-├── esp32_bt_mic/              # ESP32 firmware / ESP32 固件 (PlatformIO + ESP-IDF 5.5)
-│   ├── platformio.ini
-│   ├── sdkconfig.defaults     # BTDM dual-mode + HFP HF Client + BLE
-│   ├── partitions.csv
+├── esp32_bt_mic/                  # ESP32 firmware / ESP32 固件 (ESP-IDF 5.5)
+│   ├── CMakeLists.txt
+│   ├── partitions.csv             # Custom partition table (OTA_0, OTA_1, NVS)
+│   ├── sdkconfig.defaults         # Config defaults for Dual-profile BT & SPP
 │   └── src/
-│       ├── main.c                       # Entry point / 入口
-│       ├── bt_init.c/h                  # BT init + GAP / 蓝牙初始化
-│       ├── bt_hfp_hf.c/h                # HFP HF Client + SCO audio pipeline
-│       ├── bt_app_core.c/h              # BT task dispatcher / 蓝牙任务分发
-│       ├── bt_app_hf.c/h                # HFP callback / HFP 回调
-│       ├── ble_gatts_config.c/h         # BLE GATT service (0x1820) / BLE 服务
-│       ├── audio_capture.c/h            # I2S INMP441 driver (legacy) / I2S 驱动
-│       ├── button_handler.c/h           # Button debounce + PTT / 按钮消抖
-│       └── config_storage.c/h           # NVS config storage / NVS 配置存储
+│       ├── main.c                 # Entry / 初始化入口
+│       ├── bt_init.c              # Bluetooth stack & Controller configurations
+│       ├── bt_hfp_hf.c            # HFP Client & SCO wideband speech logic
+│       ├── classic_hidd.c         # Classic Bluetooth HID Keyboard descriptors & events
+│       ├── spp_server.c           # Bluetooth Classic SPP command channel
+│       ├── uart_console.c         # Wired hardware Console UART driver & 20s OTA engine
+│       ├── config_cmd.c           # Common configuration parser (cJSON-based)
+│       ├── audio_capture.c        # I2S legacy microphone driver for INMP441
+│       └── config_storage.c       # Non-volatile storage (NVS) read/write
 │
-├── windows_app/               # Windows config app / Windows 配置应用 (.NET 8 WPF)
-│   └── Esp32BtMicConfig/
-│       ├── Services/
-│       │   ├── BleGattClient.cs         # BLE scan / connect / R/W / BLE 扫描连接读写
-│       │   ├── KeyboardSimulator.cs     # keybd_event keyboard simulation / 键盘模拟
-│       │   └── ConfigurationService.cs  # JSON config persistence / JSON 配置持久化
-│       ├── ViewModels/MainViewModel.cs  # MVVM ViewModel
-│       └── Views/MainWindow.xaml/cs     # UI + Win32 key capture hook / 主界面
+├── windows_app_python/            # Windows config App / Windows 客户端 (SPP)
+│   ├── vox_triple.py              # Main GUI script / 界面主入口
+│   ├── spp_client.py              # Asynchronous SPP packet stream controller
+│   ├── config_service.py          # Persistence storage service
+│   ├── keyboard_io.py             # Win32 key hooks and display formatter
+│   └── requirements.txt
 │
-└── docs/
-    ├── architecture.md         # System architecture / 系统架构
-    ├── ble_protocol.md         # BLE GATT protocol specification / BLE 协议规范
-    └── wiring_diagram.txt      # Detailed wiring diagram / 详细接线图
+└── MAC_app_python/                # macOS config App / macOS 客户端 (BLE GATT)
+    ├── vox_triple_mac.py          # Main GUI script
+    ├── keyboard_io_mac.py         # macOS accessibility key capture hook
+    └── requirements.txt
 ```
 
-## BLE Protocol / BLE 协议
-
-The ESP32 exposes a custom GATT service for button configuration. The Windows app communicates with the ESP32 over BLE to read and write button mappings in real time.
-
-ESP32 暴露出一个自定义 GATT 服务用于按钮配置。Windows 应用通过 BLE 与 ESP32 通信，实时读写按钮映射。
-
-- **Service UUID / 服务 UUID**: `0x1820` (00001820-0000-1000-8000-00805F9B34FB)
-- **Button 1-3 Map / 按钮 1-3 映射** (0x2A01-0x2A03): Read/Write, `[vk_code:u8, modifier:u8]`
-  - `vk_code` — Windows Virtual-Key code (e.g. 0x0D = Enter, 0x09 = Tab) / Windows 虚拟键码
-  - `modifier` — Modifier key bitmask (see below) / 修饰键位掩码（见下表）
-- **Button Event / 按钮事件** (0x2A04): Notify, `[button_id:u8, state:u8]`
-  - Sent whenever a physical button is pressed (state=1) or released (state=0) / 物理按钮按下(1)或松开(0)时发送
-- **Device Status / 设备状态** (0x2A05): Notify, `[hfp_connected:u8, audio_active:u8]`
-
-Modifier key bitmask / 修饰键位掩码:
-
-| Bit | Key |
-|-----|-----|
-| 0 | Left Ctrl |
-| 1 | Left Shift |
-| 2 | Left Alt |
-| 3 | Left Win |
-| 4 | Right Ctrl |
-| 5 | Right Shift |
-| 6 | Right Alt |
-| 7 | Right Win |
-
-## Tech Stack / 技术栈
-
-| Component 组件 | Technology |
-|---------------|------------|
-| MCU 芯片 | ESP32 (Xtensa LX6, 240 MHz) |
-| Firmware Framework 固件框架 | ESP-IDF 5.5 / PlatformIO |
-| Bluetooth Stack 蓝牙协议栈 | Bluedroid BTDM (Classic + BLE dual-mode) |
-| Audio Codec 音频编解码 | HFP mSBC 16 kHz WBS (Wideband Speech) |
-| Mic Driver 麦克风驱动 | I2S Legacy Driver (`driver/i2s.h`) |
-| Desktop App 桌面应用 | .NET 8 WPF + CommunityToolkit.Mvvm |
-| Keyboard Simulation 键盘模拟 | Win32 `keybd_event` API |
-| BLE Scanning BLE 扫描 | `BluetoothLEAdvertisementWatcher` (Active mode) |
+---
 
 ## License / 许可证
-
 MIT License © 2024-2026
