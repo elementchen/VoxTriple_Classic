@@ -14,7 +14,7 @@
 
 - **Dual-Profile Bluetooth** — Act as a Bluetooth HID Keyboard and an HFP Hands-Free Client simultaneously. Windows and macOS recognize it natively as a keyboard and an audio input device. No drivers needed.
   
-  **双模蓝牙共存** — 同时扮演经典蓝牙 HID 键盘与 HFP 免提客户端（麦克风）双重 Profile。系统原生免驱识别为音频输入设备与实体键盘。
+  **经典蓝牙多协议共存** — 同时扮演经典蓝牙 HID 键盘与 HFP 免提客户端（麦克风）双重 Profile（即多协议复合设备）。系统原生免驱识别为音频输入设备与实体键盘。
 
 - **Teal Visual & Dotted Focus-Free UI** — Sleek card-layout desktop companion applications designed in native Python Tkinter. 100% free of dotted focus rings and fully integrated with OS style behaviors.
   
