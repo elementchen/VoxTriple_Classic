@@ -29,11 +29,11 @@
   **版本自动命名** — 编译时自动从代码中提取当前版本号，在 `build/` 目录下复制出一份带有版本戳的固件（如 `esp32_bt_mic_v1.0.3.bin`），防止重复编译覆盖，方便 GitHub Releases 归档。
 
 - **Cross-Platform Config Apps** — 
-  - **Windows App**: Communication via Bluetooth SPP Serial (COM), featuring live physical key press monitor with highlight colors.
+  - **Windows App**: Communication via physical USB Serial (COM), featuring live physical key press monitor with highlight colors.
   - **macOS App**: Control over Bluetooth BLE GATT, using Apple Accessibility features to capture keystrokes.
   
   **跨平台配置客户端** —
-  - **Windows 客户端**: 通过经典蓝牙虚拟串口（SPP COM）有线/无线通信，内置大字号物理按键按下事件监控器。
+  - **Windows 客户端**: 通过物理 USB 串口（COM 端口）有线通信，内置大字号物理按键按下事件监控器。
   - **macOS 客户端**: 通过 BLE GATT 无线修改键值，联动 macOS 系统辅助功能进行键值捕获。
 
 - **mSBC Wideband Speech** — 16 kHz wideband speech pipeline with DSP audio processing (moving average + high-pass filtering). Realizes telephone-grade crisp speech input.
@@ -108,7 +108,7 @@ idf.py -p COM5 -b 115200 flash
 
 ## Configuration Apps Guide / 配置客户端使用说明
 
-### 1. Windows Companion App (SPP 有线/无线)
+### 1. Windows Companion App (USB 物理串口有线连接)
 Located under `windows_app_python/`. Runs natively on Python 3.
 位于 `windows_app_python/` 目录下，基于 Python 3。
 
@@ -162,21 +162,21 @@ VoxTriple/
 ├── esp32_bt_mic/                  # ESP32 firmware / ESP32 固件 (ESP-IDF 5.5)
 │   ├── CMakeLists.txt
 │   ├── partitions.csv             # Custom partition table (OTA_0, OTA_1, NVS)
-│   ├── sdkconfig.defaults         # Config defaults for Dual-profile BT & SPP
+│   ├── sdkconfig.defaults         # Config defaults for Dual-profile BT (HID & HFP)
 │   └── src/
 │       ├── main.c                 # Entry / 初始化入口
 │       ├── bt_init.c              # Bluetooth stack & Controller configurations
 │       ├── bt_hfp_hf.c            # HFP Client & SCO wideband speech logic
 │       ├── classic_hidd.c         # Classic Bluetooth HID Keyboard descriptors & events
-│       ├── spp_server.c           # Bluetooth Classic SPP command channel
+│       ├── spp_server.c           # (Legacy) Bluetooth Classic SPP command channel
 │       ├── uart_console.c         # Wired hardware Console UART driver & 20s OTA engine
 │       ├── config_cmd.c           # Common configuration parser (cJSON-based)
 │       ├── audio_capture.c        # I2S legacy microphone driver for INMP441
 │       └── config_storage.c       # Non-volatile storage (NVS) read/write
 │
-├── windows_app_python/            # Windows config App / Windows 客户端 (SPP)
+├── windows_app_python/            # Windows config App / Windows 客户端 (USB 串口)
 │   ├── vox_triple.py              # Main GUI script / 界面主入口
-│   ├── spp_client.py              # Asynchronous SPP packet stream controller
+│   ├── spp_client.py              # Asynchronous Serial packet stream controller
 │   ├── config_service.py          # Persistence storage service
 │   ├── keyboard_io.py             # Win32 key hooks and display formatter
 │   └── requirements.txt
