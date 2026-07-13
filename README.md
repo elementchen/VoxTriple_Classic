@@ -20,9 +20,9 @@
   
   **卡片式无虚线原生 UI** — 基于 Python Tkinter 匠心设计的卡片式配置客户端，彻底铲除点击时难看的焦点虚线框，完美融合系统原生外观（提供直观的蓝色勾选框 ☒ 交互）。
 
-- **20s Ultra-Fast Wired OTA** — Dedicated C-level hardware console driver registry bypassing VFS serial line filters. Transfers `.bin` firmware data lossless in 1024-byte aligned blocks. OTA upgrade completes in 20-30 seconds with automatic verification and soft reboot.
+- **Smart Online & 20s Wired OTA** — Dynamically compares the local firmware version with the latest release on GitHub. Features one-click auto-downloading with progress meters and automatic fallback to a local `cache/` directory for offline updating. Complete flash transfer finishes lossless in 20-30 seconds.
   
-  **20秒极速有线 OTA** — 固件端注册硬件级串口中断驱动并进行重定向，100% 物理绕过 VFS 的控制字符拦截（防止 `Ctrl+C` 等引起字节丢失）。支持 1024 字节大块对齐与硬件级自动冲刷校验，20秒闪电完成升级并自动重启。
+  **智能在线与20秒有线 OTA** — 自动与 GitHub 云端比对版本。支持一键全自动后台下载（带百分比进度），且支持检测本地 `cache/` 目录进行离线升级。固件端 100% 物理绕过 VFS 控制字符拦截，20秒闪电完成写入并自动复位。
 
 - **Version-Stamped Releases** — Build system automatically extracts the firmware version during build time and duplicates a version-stamped binary (e.g., `esp32_bt_mic_v1.0.3.bin`) to prevent compiler overwrites.
   
@@ -30,11 +30,11 @@
 
 - **Cross-Platform Config Apps** — 
   - **Windows App**: Communication via physical USB Serial (COM), featuring live physical key press monitor with highlight colors.
-  - **macOS App**: Control over Bluetooth BLE GATT, using Apple Accessibility features to capture keystrokes.
+  - **macOS App**: Connection via physical USB Serial, using Apple Accessibility features to capture keystrokes locally.
   
   **跨平台配置客户端** —
   - **Windows 客户端**: 通过物理 USB 串口（COM 端口）有线通信，内置大字号物理按键按下事件监控器。
-  - **macOS 客户端**: 通过 BLE GATT 无线修改键值，联动 macOS 系统辅助功能进行键值捕获。
+  - **macOS 客户端**: 通过物理 USB 串口有线通信，联动 macOS 系统辅助功能进行按键捕获。
 
 - **mSBC Wideband Speech** — 16 kHz wideband speech pipeline with DSP audio processing (moving average + high-pass filtering). Realizes telephone-grade crisp speech input.
   
@@ -138,14 +138,14 @@ pyinstaller --noconfirm --onefile --windowed --name="VoxTripleConfig" vox_triple
 
 #### App Tabs Details
 - **Keyboard Config (键盘配置)**: Key mapping, TX power levels, and sleep toggles. Apply configuration wirelessly or via USB instantly (Hot Update).
-- **Firmware OTA (固件升级)**: Double-row aligned OTA interface. Select a target bin file, view extracted version numbers, and click to update.
+- **Firmware OTA (固件升级)**: Dynamic updates with automatic GitHub checks. Prompts a smart upgrade button near the version tag, downloads latest bin into a local `cache/` directory, and flashes the device in 20s.
 - **Info (说明书)**: Built-in help and user manual.
 
 ---
 
-### 2. macOS Companion App (BLE GATT 无线)
-Located under `MAC_app_python/`. Controls the device completely over Bluetooth low energy.
-位于 `MAC_app_python/` 目录下，直接通过低功耗蓝牙无线改键。
+### 2. macOS Companion App (USB 物理串口有线连接)
+Located under `MAC_app_python/`. Connects to the board over USB serial, sharing the identical key configurations, dynamic updates, and 20-second OTA flash capabilities with the Windows version.
+位于 `MAC_app_python/` 目录下。直接通过 USB 串口线连接设备，共享与 Windows 端 100% 对齐的改键配置、云版本比对、以及极速 OTA 烧录体验。
 
 #### Setup
 ```bash
@@ -188,7 +188,7 @@ VoxTriple/
 │   ├── keyboard_io.py             # Win32 key hooks and display formatter
 │   └── requirements.txt
 │
-└── MAC_app_python/                # macOS config App / macOS 客户端 (BLE GATT)
+└── MAC_app_python/                # macOS config App / macOS 客户端 (USB 串口)
     ├── vox_triple_mac.py          # Main GUI script
     ├── keyboard_io_mac.py         # macOS accessibility key capture hook
     └── requirements.txt

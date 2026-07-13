@@ -97,10 +97,18 @@ class VoxTripleApp:
         self._last_event_text = tk.StringVar(value="None")
         self._connected = False
 
+        # Cloud update parameters
+        self._github_version = None
+        self._github_bin_url = None
+        self._board_version = None
+
         self._build_ui()
 
         # Fill serial ports list on load
         self.root.after(100, self._refresh_ports)
+
+        # Check GitHub version on startup
+        root.after(800, lambda: _run_async(self._check_github_version()))
 
     # ── UI construction ───────────────────────────────────────────
     def _build_ui(self):
@@ -166,6 +174,12 @@ class VoxTripleApp:
         self._version_label = ttk.Label(status_row, text="Firmware Version: --", font=("Helvetica", 9, "bold"), foreground="#2980b9", style="Header.TLabel")
         self._version_label.pack(side="left", padx=8)
 
+        self._new_ver_label = ttk.Label(status_row, text="", font=("Helvetica", 9, "bold"), foreground="#d35400", style="Header.TLabel")
+        # Kept for dynamic updates (not packed by default)
+
+        self._update_btn = ttk.Button(status_row, text="Update / 升级固件", command=self._on_update_clicked, takefocus=False)
+        # Kept for dynamic updates (not packed by default)
+
         # Line 3: System Status Prompt & Big Live Key monitoring display
         mon_row = ttk.Frame(top_frame, style="Header.TFrame")
         mon_row.pack(fill="x", pady=(4, 0))
@@ -184,6 +198,7 @@ class VoxTripleApp:
         # --- Notebook Container for Tabs ---
         notebook = ttk.Notebook(self.root, padding=4, takefocus=False)
         notebook.pack(fill="both", expand=True, padx=8, pady=4)
+        self._notebook = notebook
 
         # ==========================================
         # TAB 1: Keyboard Config (键盘配置热更新)
@@ -401,6 +416,8 @@ class VoxTripleApp:
         self._hfp_label.configure(text="HFP State: --")
         self._audio_label.configure(text="Audio Link: --")
         self._version_label.configure(text="Firmware Version: --")
+        self._board_version = None
+        self._compare_and_update_version_ui()
 
     async def _fetch_device_config(self):
         self._status_text.set("Reading config from device...")
@@ -423,6 +440,8 @@ class VoxTripleApp:
             
             fw_ver = cfg.get("version", "1.0.0")
             self._version_label.configure(text=f"Firmware Version: {fw_ver}")
+            self._board_version = fw_ver
+            self._compare_and_update_version_ui()
         else:
             self.root.after(0, lambda: self._status_text.set("Failed to read config from device."))
 
@@ -556,6 +575,126 @@ class VoxTripleApp:
         audio_s = "Active / 活跃" if audio else "--"
         self._hfp_label.configure(text=f"HFP: {hfp_s}")
         self._audio_label.configure(text=f"Audio: {audio_s}")
+
+    # ── Cloud update & OTA operations ─────────────────────────────
+    async def _check_github_version(self):
+        url = "https://api.github.com/repos/elementchen/VoxTriple_Classic/releases/latest"
+        headers = {"User-Agent": "VoxTriple-App"}
+        req = urllib.request.Request(url, headers=headers, method="GET")
+        try:
+            loop = asyncio.get_event_loop()
+            response = await loop.run_in_executor(None, lambda: urllib.request.urlopen(req).read().decode())
+            data = json.loads(response)
+            
+            tag_name = data.get("tag_name", "")
+            version_str = tag_name.lstrip("v")
+            
+            bin_url = None
+            for asset in data.get("assets", []):
+                name = asset.get("name", "")
+                if name.startswith("esp32_bt_mic_v") and name.endswith(".bin") and "merged" not in name:
+                    bin_url = asset.get("browser_download_url")
+                    break
+            
+            if version_str and bin_url:
+                self._github_version = version_str
+                self._github_bin_url = bin_url
+                self.root.after(0, self._compare_and_update_version_ui)
+        except Exception as e:
+            log.error(f"Failed to check GitHub version: {e}")
+
+    def _compare_and_update_version_ui(self):
+        # Clean existing dynamic labels and buttons
+        self._new_ver_label.pack_forget()
+        self._update_btn.pack_forget()
+        
+        if not self._connected or not self._board_version or not self._github_version:
+            return
+            
+        try:
+            # Parse semantic version (e.g. 1.0.3 -> [1, 0, 3])
+            local_parts = [int(x) for x in self._board_version.split(".") if x.isdigit()]
+            cloud_parts = [int(x) for x in self._github_version.split(".") if x.isdigit()]
+            
+            if cloud_parts > local_parts:
+                self._new_ver_label.configure(text=f"(最新版: {self._github_version})", foreground="#d35400")
+                self._new_ver_label.pack(side="left", padx=8)
+                self._update_btn.pack(side="left", padx=8)
+            else:
+                self._new_ver_label.configure(text="(已经是最新版固件)", foreground="#16a085")
+                self._new_ver_label.pack(side="left", padx=8)
+        except Exception as e:
+            log.error(f"Version comparison failed: {e}")
+            # Fallback comparison
+            if self._github_version != self._board_version:
+                self._new_ver_label.configure(text=f"(最新版: {self._github_version})", foreground="#d35400")
+                self._new_ver_label.pack(side="left", padx=8)
+                self._update_btn.pack(side="left", padx=8)
+            else:
+                self._new_ver_label.configure(text="(已经是最新版固件)", foreground="#16a085")
+                self._new_ver_label.pack(side="left", padx=8)
+
+    def _on_update_clicked(self):
+        if not self._connected or not self._github_version:
+            return
+        
+        # Shift to Tab 2
+        self._notebook.select(1)
+        
+        # Start smart upgrade
+        self._set_ui_state(tk.DISABLED)
+        self._ota_status_text.set("Initializing smart update...")
+        _run_async(self._do_smart_update())
+
+    async def _do_smart_update(self):
+        cache_dir = "cache"
+        os.makedirs(cache_dir, exist_ok=True)
+        filename = f"esp32_bt_mic_v{self._github_version}.bin"
+        save_path = os.path.join(cache_dir, filename)
+        
+        # Check cache
+        if os.path.exists(save_path):
+            self.root.after(0, lambda: self._ota_status_text.set("Found cached bin. Flashing..."))
+        else:
+            # Download from GitHub
+            self.root.after(0, lambda: self._ota_status_text.set("Downloading latest firmware..."))
+            try:
+                await self._download_firmware(self._github_bin_url, save_path)
+            except Exception as e:
+                log.error(f"Download failed: {e}")
+                self.root.after(0, lambda: messagebox.showerror(
+                    "Error / 错误", 
+                    f"Failed to download firmware from GitHub:\n{e}\n\n下载最新固件失败，请检查网络！"
+                ))
+                self.root.after(0, lambda: self._ota_status_text.set("Download failed."))
+                self.root.after(0, lambda: self._set_ui_state(tk.NORMAL))
+                return
+                
+        # Trigger OTA flash
+        self.root.after(0, lambda: self._ota_status_text.set("Flashing downloaded firmware..."))
+        await self._do_ota(save_path)
+
+    async def _download_firmware(self, download_url, save_path):
+        loop = asyncio.get_event_loop()
+        def do_download():
+            req = urllib.request.Request(download_url, headers={"User-Agent": "VoxTriple-App"})
+            with urllib.request.urlopen(req) as response:
+                total_size = int(response.headers.get('content-length', 0))
+                bytes_read = 0
+                with open(save_path, "wb") as f:
+                    while True:
+                        chunk = response.read(8192)
+                        if not chunk:
+                            break
+                        f.write(chunk)
+                        bytes_read += len(chunk)
+                        if total_size > 0:
+                            pct = (bytes_read / total_size) * 100
+                            self.root.after(0, lambda p=pct: self._ota_progress_var.set(p))
+                            self.root.after(0, lambda b=bytes_read, t=total_size, p=pct: self._ota_status_text.set(
+                                f"Downloading: {b}/{t} bytes ({p:.1f}%)"
+                            ))
+        await loop.run_in_executor(None, do_download)
 
     def _on_close(self):
         keyboard_io.stop_key_capture()
