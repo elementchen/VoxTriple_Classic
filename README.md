@@ -10,6 +10,25 @@
 
 ----
 
+## 🚀 Quick Start / 极速新手指南 (小白必读)
+
+为了让不懂代码、不熟悉开发环境的小白用户以最傻瓜式的方式运行本项目，我们提供以下极速上手指引。请根据您的设备状态选择对应操作：
+
+### 1. 首次拿到开发板？（首次物理初始化）
+如果您是**全新开发板**，或者**刷过别的程序的板子**，请先进行一次物理初始化烧录：
+* **第一步**：下载乐鑫官方的 [ESP32 Flash Download Tool 官方烧录工具](https://www.espressif.com.cn/zh-hans/support/download/other-tools)；
+* **第二步**：从项目 [GitHub Releases](https://github.com/elementchen/VoxTriple_Classic/releases) 页面，下载最新版本的**「一键合并固件」**（文件名为 **`esp32_bt_mic_merged_vX.X.X.bin`**）；
+* **第三步**：打开烧录工具，导入该 `.bin` 文件，**烧录首偏置地址填 `0x0`**，点击 **`START`** 即可一键刷入。刷入后复位板子，您的系统即已成功运行！
+> 💡 详细的傻瓜图文操作步骤，请点击阅读：[📖 中文新手固件烧录与更新教程](docs/flash_guide_zh.md)
+
+### 2. 以后需要升级版本？（日常一键免代码 OTA）
+一旦您的板子成功跑起来了，如果日后官方发布了新版，您**完全不需要**使用复杂的官方烧录工具。直接运行配置客户端即可一键闪电更新：
+* **第一步**：双击运行免依赖的 Windows 配置程序 **`VoxTripleConfig.exe`** 并在最上面连接您的串口；
+* **第二步**：连接成功后，App 会在后台自动比对版本。一旦云端有更新，顶端版本号旁会**自动浮现高亮的「Update / 升级固件」按钮**；
+* **第三步**：点击按钮，App 将全自动切换页签、全自动从 GitHub 后台为您分包下载**「常规应用固件」**（文件名为 **`esp32_bt_mic_vX.X.X.bin`**，无需您手工下载），并在 **20秒** 内通过物理串口闪电完成 OTA 直写升级并自动软重启！
+
+----
+
 ## Features / 功能特性
 
 - **Dual-Profile Bluetooth** — Act as a Bluetooth HID Keyboard and an HFP Hands-Free Client simultaneously. Windows and macOS recognize it natively as a keyboard and an audio input device. No drivers needed.
