@@ -476,13 +476,13 @@ void bt_app_hf_client_cb(esp_hf_client_cb_event_t event, esp_hf_client_cb_param_
             esp_hf_client_register_data_callback(bt_app_hf_incoming_cb, bt_app_hf_outgoing_cb);
 
             bt_audio_set_active(true);
-            gpio_set_level(GPIO_NUM_18, 1); // Turn indicator LED ON when mic/SCO is active
+            // gpio_set_level(GPIO_NUM_18, 1); // LED control shifted directly to Button 1
             uart_console_send_event_status(bt_hfp_is_connected(), true);
 
         } else if (param->audio_stat.state == ESP_HF_CLIENT_AUDIO_STATE_DISCONNECTED) {
             ESP_LOGI(TAG, "Audio disconnected");
             bt_audio_set_active(false);
-            gpio_set_level(GPIO_NUM_18, 0); // Turn indicator LED OFF when mic/SCO is inactive
+            // gpio_set_level(GPIO_NUM_18, 0); // LED control shifted directly to Button 1
             uart_console_send_event_status(bt_hfp_is_connected(), false);
 
             /* Unregister data callbacks — pipeline keeps running */
