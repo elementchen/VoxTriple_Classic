@@ -40,10 +40,10 @@ static void inactivity_sleep_cb(TimerHandle_t xTimer)
 {
     ESP_LOGI(TAG, "30 min idle — entering deep sleep (press any key to wake)");
 
-    /* Keep GPIO4 pull-up during deep sleep so button press pulls it LOW */
-    rtc_gpio_pullup_en(GPIO_NUM_4);
-    rtc_gpio_pulldown_dis(GPIO_NUM_4);
-    esp_sleep_enable_ext1_wakeup(1ULL << GPIO_NUM_4, ESP_EXT1_WAKEUP_ALL_LOW);
+    /* Keep Button 2 (GPIO16) pull-up during deep sleep to allow wake-up */
+    rtc_gpio_pullup_en(CONFIG_BUTTON_2_GPIO);
+    rtc_gpio_pulldown_dis(CONFIG_BUTTON_2_GPIO);
+    esp_sleep_enable_ext1_wakeup(1ULL << CONFIG_BUTTON_2_GPIO, ESP_EXT1_WAKEUP_ALL_LOW);
 
     vTaskDelay(pdMS_TO_TICKS(100));  /* let log flush */
     esp_deep_sleep_start();
@@ -116,8 +116,8 @@ static void button_task_func(void *arg)
                     press_time[i] = now;
                     ESP_LOGI(TAG, "Button %d pressed", i + 1);
                     uart_console_send_event_btn(i, 1); // Notify PC over UART
-                    if (i == 0) {
-                        gpio_set_level(INDICATOR_LED_GPIO, 1); // Turn LED ON when Button 1 is pressed
+                    if (i == 1) {
+                        gpio_set_level(INDICATOR_LED_GPIO, 1); // Turn LED ON when Button 2 is pressed
                     }
 
                     /* Reset inactivity deep sleep timer */
@@ -131,11 +131,14 @@ static void button_task_func(void *arg)
                         get_button_mapping(i, &vk, &mod);
                         classic_hidd_send_key(mod, vk);
                     } else {
-                        ESP_LOGW(TAG, "Classic BT HID not connected. Button press triggers reconnect...");
-                        esp_bd_addr_t saved_addr;
-                        if (config_storage_load_hfp_addr(saved_addr) == ESP_OK) {
-                            ESP_LOGI(TAG, "Saved host address found. Initiating reconnect to Host...");
-                            esp_bt_hid_device_connect(saved_addr);
+                        // Only Button 2 triggers reconnect
+                        if (i == 1) {
+                            ESP_LOGW(TAG, "Classic BT HID not connected. Button 2 press triggers reconnect...");
+                            esp_bd_addr_t saved_addr;
+                            if (config_storage_load_hfp_addr(saved_addr) == ESP_OK) {
+                                ESP_LOGI(TAG, "Saved host address found. Initiating reconnect to Host...");
+                                esp_bt_hid_device_connect(saved_addr);
+                            }
                         }
                     }
                 }
@@ -146,8 +149,8 @@ static void button_task_func(void *arg)
                     uint32_t duration = now - press_time[i];
                     ESP_LOGI(TAG, "Button %d released (duration: %lu ms)", i + 1, duration);
                     uart_console_send_event_btn(i, 0); // Notify PC over UART
-                    if (i == 0) {
-                        gpio_set_level(INDICATOR_LED_GPIO, 0); // Turn LED OFF when Button 1 is released
+                    if (i == 1) {
+                        gpio_set_level(INDICATOR_LED_GPIO, 0); // Turn LED OFF when Button 2 is released
                     }
                     if (classic_hidd_is_connected()) {
                         classic_hidd_release_key();
