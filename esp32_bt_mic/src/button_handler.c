@@ -116,8 +116,8 @@ static void button_task_func(void *arg)
                     press_time[i] = now;
                     ESP_LOGI(TAG, "Button %d pressed", i + 1);
                     uart_console_send_event_btn(i, 1); // Notify PC over UART
-                    if (i == 1) {
-                        gpio_set_level(INDICATOR_LED_GPIO, 1); // Turn LED ON when Button 2 is pressed
+                    if (i == 0) {
+                        gpio_set_level(INDICATOR_LED_GPIO, 1); // Turn LED ON when Button 1 is pressed
                     }
 
                     /* Reset inactivity deep sleep timer */
@@ -149,8 +149,8 @@ static void button_task_func(void *arg)
                     uint32_t duration = now - press_time[i];
                     ESP_LOGI(TAG, "Button %d released (duration: %lu ms)", i + 1, duration);
                     uart_console_send_event_btn(i, 0); // Notify PC over UART
-                    if (i == 1) {
-                        gpio_set_level(INDICATOR_LED_GPIO, 0); // Turn LED OFF when Button 2 is released
+                    if (i == 0) {
+                        gpio_set_level(INDICATOR_LED_GPIO, 0); // Turn LED OFF when Button 1 is released
                     }
                     if (classic_hidd_is_connected()) {
                         classic_hidd_release_key();
