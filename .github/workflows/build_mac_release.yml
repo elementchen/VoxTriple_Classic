@@ -1,0 +1,56 @@
+name: Build and Release macOS App
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-macos:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r windows_app_python/requirements.txt
+          pip install -r MAC_app_python/requirements.txt
+          pip install pyinstaller
+
+      - name: Build macOS App Bundled Zip
+        run: |
+          # 1. Read project version dynamically from esp32_bt_mic/CMakeLists.txt
+          VER=$(grep "set(PROJECT_VER" esp32_bt_mic/CMakeLists.txt | cut -d'"' -f2)
+          echo "PROJECT_VERSION=$VER" >> $GITHUB_ENV
+          echo "Building version v$VER..."
+
+          # 2. Change directory and package using PyInstaller
+          cd MAC_app_python
+          pyinstaller --clean -y VoxTriple_mac.spec
+
+          # 3. Compress the VoxTriple.app folder to zip
+          cd dist
+          zip -r VoxTriple_mac_v${VER}.zip VoxTriple.app
+          echo "Zipped executable successfully: VoxTriple_mac_v${VER}.zip"
+
+      - name: Upload macOS App Zip Asset to Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ env.PROJECT_VERSION }}
+          files: MAC_app_python/dist/VoxTriple_mac_v${{ env.PROJECT_VERSION }}.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
