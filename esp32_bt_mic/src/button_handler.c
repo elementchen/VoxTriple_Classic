@@ -194,7 +194,7 @@ static void button_task_func(void *arg)
                     ESP_LOGI(TAG, "Button %d pressed", i + 1);
                     uart_console_send_event_btn(i, 1); // Notify PC over UART
                     if (i == 0) {
-                        gpio_set_level(INDICATOR_LED_GPIO, 1); // Turn LED ON when Button 1 is pressed
+                        gpio_set_level(INDICATOR_LED_GPIO, 0); // Turn LED ON (Active Low) when Button 1 is pressed
                     }
 
                     /* Reset inactivity deep sleep timer */
@@ -227,7 +227,7 @@ static void button_task_func(void *arg)
                     ESP_LOGI(TAG, "Button %d released (duration: %lu ms)", i + 1, duration);
                     uart_console_send_event_btn(i, 0); // Notify PC over UART
                     if (i == 0) {
-                        gpio_set_level(INDICATOR_LED_GPIO, 0); // Turn LED OFF when Button 1 is released
+                        gpio_set_level(INDICATOR_LED_GPIO, 1); // Turn LED OFF (Active Low) when Button 1 is released
                     }
                     if (classic_hidd_is_connected()) {
                         classic_hidd_release_key();
@@ -239,7 +239,7 @@ static void button_task_func(void *arg)
                         
                         // 1. Flash LED as physical feedback
                         for (int j = 0; j < 6; j++) {
-                            gpio_set_level(INDICATOR_LED_GPIO, j % 2);
+                            gpio_set_level(INDICATOR_LED_GPIO, (j % 2 == 0) ? 0 : 1);
                             vTaskDelay(pdMS_TO_TICKS(100));
                         }
                         
@@ -296,7 +296,7 @@ void button_handler_init(void)
 
     /* Indicator LED — simple GPIO, no RMT/DMA conflict with BT */
     gpio_set_direction(INDICATOR_LED_GPIO, GPIO_MODE_OUTPUT);
-    gpio_set_level(INDICATOR_LED_GPIO, 0);
+    gpio_set_level(INDICATOR_LED_GPIO, 1); // Default to OFF (1)
 
     /* Start button monitoring task */
     s_btn_task_running = true;
@@ -309,12 +309,12 @@ void button_handler_init(void)
                                        pdFALSE, NULL, inactivity_sleep_cb);
     if (s_inactivity_timer) xTimerStart(s_inactivity_timer, 0);
 
-    /* Flash LED 3 times quickly as visual wakeup feedback on boot */
+    /* Flash LED 3 times quickly as visual wakeup feedback on boot (Active Low) */
     for (int i = 0; i < 6; i++) {
-        gpio_set_level(INDICATOR_LED_GPIO, (i % 2 == 0) ? 1 : 0);
+        gpio_set_level(INDICATOR_LED_GPIO, (i % 2 == 0) ? 0 : 1); // 0: ON, 1: OFF
         vTaskDelay(pdMS_TO_TICKS(100));
     }
-    gpio_set_level(INDICATOR_LED_GPIO, 0);
+    gpio_set_level(INDICATOR_LED_GPIO, 1); // Keep it OFF (1)
 
     ESP_LOGI(TAG, "Button handler initialized");
 }
