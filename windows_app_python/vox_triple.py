@@ -73,7 +73,7 @@ def _build_modifier(vars: dict) -> int:
 class VoxTripleApp:
     def __init__(self, root: tk.Tk):
         self.root = root
-        root.title("VoxTriple — ESP32 BT Mic Config (Python)")
+        root.title("VoxTriple Config Client (v1.0.9)")
         root.geometry("640x700")
         root.minsize(600, 640)
         root.resizable(True, True)
