@@ -27,6 +27,9 @@ static const char *TAG = "BTN_HANDLER";
 /* Button GPIO configuration */
 #define DEBOUNCE_MS          50
 #define LONG_PRESS_MS        1000
+#include "esp_bt.h"
+#include "esp_bt_main.h"
+
 #define BUTTON_TASK_STACK    4096
 #define BUTTON_TASK_PRIORITY 3
 
@@ -35,18 +38,92 @@ static const char *TAG = "BTN_HANDLER";
 
 static TimerHandle_t s_inactivity_timer = NULL;
 
-/* Enter deep sleep — power down WiFi/BT/CPU. GPIO4 (RTC) will wake us. */
+static bool is_rtc_gpio(gpio_num_t gpio)
+{
+    switch (gpio) {
+        case GPIO_NUM_0:
+        case GPIO_NUM_2:
+        case GPIO_NUM_4:
+        case GPIO_NUM_12:
+        case GPIO_NUM_13:
+        case GPIO_NUM_14:
+        case GPIO_NUM_15:
+        case GPIO_NUM_25:
+        case GPIO_NUM_26:
+        case GPIO_NUM_27:
+        case GPIO_NUM_32:
+        case GPIO_NUM_33:
+        case GPIO_NUM_34:
+        case GPIO_NUM_35:
+        case GPIO_NUM_36:
+        case GPIO_NUM_37:
+        case GPIO_NUM_38:
+        case GPIO_NUM_39:
+            return true;
+        default:
+            return false;
+    }
+}
+
+/* Enter sleep — adaptive selection of Deep Sleep or Light Sleep based on RTC IO capability. */
 static void inactivity_sleep_cb(TimerHandle_t xTimer)
 {
-    ESP_LOGI(TAG, "30 min idle — entering deep sleep (press any key to wake)");
+    gpio_num_t wakeup_pin = CONFIG_BUTTON_2_GPIO;
+    bool can_deep_sleep = is_rtc_gpio(wakeup_pin);
 
-    /* Keep Button 2 (GPIO16) pull-up during deep sleep to allow wake-up */
-    rtc_gpio_pullup_en(CONFIG_BUTTON_2_GPIO);
-    rtc_gpio_pulldown_dis(CONFIG_BUTTON_2_GPIO);
-    esp_sleep_enable_ext1_wakeup(1ULL << CONFIG_BUTTON_2_GPIO, ESP_EXT1_WAKEUP_ALL_LOW);
+    if (can_deep_sleep) {
+        ESP_LOGI(TAG, "Inactivity timeout — entering DEEP SLEEP (wakeup pin: GPIO %d)", wakeup_pin);
 
-    vTaskDelay(pdMS_TO_TICKS(100));  /* let log flush */
-    esp_deep_sleep_start();
+        /* 1. Fully disable and deinit Bluetooth for maximum power saving in deep sleep */
+        #if ENABLE_CLASSIC_BT_MIC
+        esp_bt_gap_set_scan_mode(ESP_BT_NON_CONNECTABLE, ESP_BT_NON_DISCOVERABLE);
+        esp_hf_client_deinit();
+        #endif
+        esp_bluedroid_disable();
+        esp_bluedroid_deinit();
+        esp_bt_controller_disable();
+        esp_bt_controller_deinit();
+
+        /* 2. Configure RTC wakeup sources */
+        rtc_gpio_pullup_en(wakeup_pin);
+        rtc_gpio_pulldown_dis(wakeup_pin);
+        esp_sleep_enable_ext1_wakeup(1ULL << wakeup_pin, ESP_EXT1_WAKEUP_ALL_LOW);
+
+        vTaskDelay(pdMS_TO_TICKS(100));  /* let log flush */
+        esp_deep_sleep_start();
+    } else {
+        /* If configured pin doesn't support RTC (like GPIO16), fall back to Light Sleep to prevent Crash and keep logic closed */
+        ESP_LOGW(TAG, "Wakeup pin GPIO %d lacks RTC support! Entering LIGHT SLEEP instead...", wakeup_pin);
+
+        /* Disable Bluetooth RF scan to lower Light Sleep power usage */
+        esp_bt_gap_set_scan_mode(ESP_BT_NON_CONNECTABLE, ESP_BT_NON_DISCOVERABLE);
+
+        /* Configure GPIO wakeup */
+        gpio_wakeup_enable(wakeup_pin, GPIO_INTR_LOW_LEVEL);
+        esp_sleep_enable_gpio_wakeup();
+
+        vTaskDelay(pdMS_TO_TICKS(100));  /* let log flush */
+        esp_light_sleep_start();
+
+        /* --- Re-execution continues here upon waking up --- */
+        ESP_LOGI(TAG, "Woken up from LIGHT SLEEP! Restoring RF...");
+
+        /* Restore scanner mode */
+        esp_bt_gap_set_scan_mode(ESP_BT_CONNECTABLE, ESP_BT_GENERAL_DISCOVERABLE);
+        
+        /* Clean wakeup configs */
+        gpio_intr_disable(wakeup_pin);
+
+        /* Automatically attempt reconnect after light sleep wakeup */
+        esp_bd_addr_t saved_addr;
+        if (config_storage_load_hfp_addr(saved_addr) == ESP_OK) {
+            ESP_LOGI(TAG, "Re-triggering reconnect after wakeup...");
+            esp_bt_hid_device_connect(saved_addr);
+        }
+
+        /* Reset the idle timer */
+        if (s_inactivity_timer) xTimerReset(s_inactivity_timer, 0);
+    }
 }
 
 static void get_button_mapping(uint8_t button_id, uint8_t *vk_code, uint8_t *modifier)
