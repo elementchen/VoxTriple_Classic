@@ -8,6 +8,9 @@
 #include "config_cmd.h"
 #include "uart_console.h"
 #include "esp_app_desc.h"
+#include "esp_system.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 
 #define TAG "CONFIG_CMD"
 
@@ -38,13 +41,15 @@ void execute_config_cmd(const char *cmd_line, size_t len, cmd_respond_cb_t respo
             config_storage_load_tx_power(&tx_power);
             uint8_t sleep_mode = 0;
             config_storage_load_sleep_mode(&sleep_mode);
+            uint8_t mic_enabled = 1;
+            config_storage_load_mic_enabled(&mic_enabled);
             
             const esp_app_desc_t *app_desc = esp_app_get_description();
-            char resp[320];
+            char resp[360];
             snprintf(resp, sizeof(resp), 
                      "{\"status\":\"ok\",\"version\":\"%s\",\"btn1_vk\":%d,\"btn1_mod\":%d,\"btn2_vk\":%d,\"btn2_mod\":%d,"
-                     "\"btn3_vk\":%d,\"btn3_mod\":%d,\"btn4_vk\":%d,\"btn4_mod\":%d,\"tx_power\":%d,\"sleep_mode\":%d}\n",
-                     app_desc->version, vk1, mod1, vk2, mod2, vk3, mod3, vk4, mod4, tx_power, sleep_mode);
+                     "\"btn3_vk\":%d,\"btn3_mod\":%d,\"btn4_vk\":%d,\"btn4_mod\":%d,\"tx_power\":%d,\"sleep_mode\":%d,\"mic_enabled\":%d}\n",
+                     app_desc->version, vk1, mod1, vk2, mod2, vk3, mod3, vk4, mod4, tx_power, sleep_mode, mic_enabled);
             respond_cb(resp, strlen(resp));
             
         } else if (strcmp(cmd, "set_btn") == 0) {
@@ -80,6 +85,19 @@ void execute_config_cmd(const char *cmd_line, size_t len, cmd_respond_cb_t respo
                 
                 const char *resp = "{\"status\":\"ok\"}\n";
                 respond_cb(resp, strlen(resp));
+            }
+        } else if (strcmp(cmd, "set_mic_enabled") == 0) {
+            cJSON *enabled_item = cJSON_GetObjectItem(root, "enabled");
+            if (enabled_item && cJSON_IsNumber(enabled_item)) {
+                uint8_t enabled = enabled_item->valueint;
+                config_storage_save_mic_enabled(enabled);
+                
+                const char *resp = "{\"status\":\"ok\"}\n";
+                respond_cb(resp, strlen(resp));
+                
+                ESP_LOGI(TAG, "Mic enabled status updated to %d. Resetting system in 1 second...", enabled);
+                vTaskDelay(pdMS_TO_TICKS(1000));
+                esp_restart();
             }
         } else if (strcmp(cmd, "ota_start") == 0) {
             cJSON *size_item = cJSON_GetObjectItem(root, "size");

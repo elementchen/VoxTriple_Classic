@@ -137,21 +137,31 @@ static void bt_stack_up_handler(uint16_t event, void *p_param)
         /* Register GAP callback */
         esp_bt_gap_register_callback(bt_gap_cb);
 
-        /* Set Class of Device for Hands-Free device (headset/microphone)
-         * Service: Audio + Capturing + Telephony
-         * Major:   Audio/Video (0x04)
-         * Minor:   Hands-free Device (0x02)
-         * This identifies the device as a Bluetooth microphone/headset
+        uint8_t mic_enabled = 1;
+        config_storage_load_mic_enabled(&mic_enabled);
+
+        /* Set Class of Device
+         * If mic enabled: Audio + Capturing + Telephony COD (0x340), Major 0x04 Video/Audio, Minor 0x02 Hands-free.
+         * If mic disabled: Major 0x05 Peripheral, Minor 0x40 Keyboard, COD Service 0x000 (standard keyboard profile).
          */
         esp_bt_cod_t cod;
-        cod.service = 0x340;  // Audio(0x100) + Capturing(0x040) + Telephony(0x200)
-        cod.major = 0x04;     // Audio/Video
-        cod.minor = 0x02;     // Hands-free Device
-        esp_bt_gap_set_cod(cod, ESP_BT_SET_COD_SERVICE_CLASS | ESP_BT_SET_COD_MAJOR_MINOR);
+        if (mic_enabled) {
+            cod.service = 0x340;  // Audio(0x100) + Capturing(0x040) + Telephony(0x200)
+            cod.major = 0x04;     // Audio/Video
+            cod.minor = 0x02;     // Hands-free Device
+            esp_bt_gap_set_cod(cod, ESP_BT_SET_COD_SERVICE_CLASS | ESP_BT_SET_COD_MAJOR_MINOR);
 
-        /* Register HFP HF Client callback and initialize */
-        esp_hf_client_register_callback(bt_app_hf_client_cb);
-        esp_hf_client_init();
+            /* Register HFP HF Client callback and initialize */
+            esp_hf_client_register_callback(bt_app_hf_client_cb);
+            esp_hf_client_init();
+            ESP_LOGI(TAG, "HFP Client initialized successfully (Mic Enabled Mode)");
+        } else {
+            cod.service = 0x000;
+            cod.major = 0x05;     // Peripheral
+            cod.minor = 0x10;     // Keyboard (0x10 in 6-bit field translates to 0x40 in COD representation)
+            esp_bt_gap_set_cod(cod, ESP_BT_SET_COD_SERVICE_CLASS | ESP_BT_SET_COD_MAJOR_MINOR);
+            ESP_LOGI(TAG, "HFP Client initialization skipped (Keyboard Only Mode)");
+        }
 
         /* Set pairing PIN */
         esp_bt_pin_type_t pin_type = ESP_BT_PIN_TYPE_VARIABLE;
@@ -234,13 +244,20 @@ esp_err_t bt_stack_init(void)
     /* Set scan mode to connectable & discoverable initially so Windows can find/reconnect classic BT */
     esp_bt_gap_set_scan_mode(ESP_BT_CONNECTABLE, ESP_BT_GENERAL_DISCOVERABLE);
 
-    /* Classic BT compound device name (microphone/headset + keyboard) */
+    /* Classic BT compound device name */
+    uint8_t mic_enabled = 1;
+    config_storage_load_mic_enabled(&mic_enabled);
     const uint8_t *addr = esp_bt_dev_get_address();
     if (addr) {
-        snprintf(g_bt_device_name, sizeof(g_bt_device_name),
-                 "ESP32_BT_KBD_MIC_%02X", addr[5]);
+        if (mic_enabled) {
+            snprintf(g_bt_device_name, sizeof(g_bt_device_name),
+                     "ESP32_BT_KBD_MIC_%02X", addr[5]);
+        } else {
+            snprintf(g_bt_device_name, sizeof(g_bt_device_name),
+                     "ESP32_BT_KBD_KEY_%02X", addr[5]);
+        }
     }
-    ESP_LOGI(TAG, "Bluetooth controller mode: Classic BT Only (BR/EDR)");
+    ESP_LOGI(TAG, "Bluetooth controller mode: Classic BT Only (BR/EDR), Name: %s", g_bt_device_name);
 
     /* Start BT application task */
     bt_app_task_start_up();
@@ -257,6 +274,13 @@ static uint32_t s_last_deactivate_time = 0;
 
 void bt_classic_activate(void)
 {
+    uint8_t mic_enabled = 1;
+    config_storage_load_mic_enabled(&mic_enabled);
+    if (!mic_enabled) {
+        ESP_LOGW(TAG, "Mic disabled in config, ignoring audio activation request.");
+        return;
+    }
+
     if (s_classic_bt_activated) return;
 
     /* 频控防护：上一次挂断与本次重新建立之间必须间隔至少 1000ms，防抖防爆 */

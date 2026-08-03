@@ -20,6 +20,9 @@
 #define NVS_KEY_BTN2_MAP  "btn2_map"
 #define NVS_KEY_BTN3_MAP  "btn3_map"
 #define NVS_KEY_BTN4_MAP  "btn4_map"
+#define NVS_KEY_SLEEP_MODE "sleep_mode"
+#define NVS_KEY_MIC_ENABLED "mic_enabled"
+#define NVS_KEY_TX_POWER   "tx_power"
 
 /**
  * @brief Initialize NVS configuration storage
@@ -83,6 +86,20 @@ esp_err_t config_storage_save_sleep_mode(uint8_t enabled);
  * @return ESP_OK on success, ESP_ERR_NVS_NOT_FOUND if not saved
  */
 esp_err_t config_storage_load_sleep_mode(uint8_t *enabled);
+
+/**
+ * @brief Save HFP microphone enablement mode to NVS
+ * @param enabled  0=disabled, 1=enabled
+ * @return ESP_OK on success
+ */
+esp_err_t config_storage_save_mic_enabled(uint8_t enabled);
+
+/**
+ * @brief Load HFP microphone enablement mode from NVS
+ * @param enabled  Output: 0=disabled, 1=enabled
+ * @return ESP_OK on success, ESP_ERR_NVS_NOT_FOUND if not saved
+ */
+esp_err_t config_storage_load_mic_enabled(uint8_t *enabled);
 
 /**
  * @brief Clear all keys in NVS namespace

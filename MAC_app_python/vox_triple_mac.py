@@ -91,7 +91,8 @@ class VoxTripleApp:
                 self._btn[i]["mod_vars"][mk].trace_add("write", lambda *a, idx=i: self._update_display(idx))
 
         self._tx_power = self._cfg.get("tx_power", 4)
-        self._sleep_mode = tk.BooleanVar(value=self._cfg.get("sleep_mode", True))
+        self._sleep_mode = tk.BooleanVar(value=True)
+        self._mic_enabled = tk.BooleanVar(value=self._cfg.get("mic_enabled", True))
 
         self._status_text = tk.StringVar(value="Disconnected / 未连接")
         self._last_event_text = tk.StringVar(value="None")
@@ -234,8 +235,8 @@ class VoxTripleApp:
         self._tx_combo.bind("<<ComboboxSelected>>", self._on_tx_power_change)
         self._tx_combo.pack(side="left", padx=4)
         
-        ttk.Label(dev_row, text="Sleep Mode / 睡眠模式:", font=("Helvetica", 9, "bold")).pack(side="left", padx=(16, 4))
-        ttk.Checkbutton(dev_row, text="Enabled / 启用", variable=self._sleep_mode, takefocus=False).pack(side="left")
+        ttk.Label(dev_row, text="Microphone / 麦克风:", font=("Helvetica", 9, "bold")).pack(side="left", padx=(16, 4))
+        ttk.Checkbutton(dev_row, text="Enabled / 启用", variable=self._mic_enabled, takefocus=False).pack(side="left")
 
         # Action Button: Write mappings to physical keyboard
         self._write_btn = ttk.Button(tab_config, text="Write to Keyboard / 写入到蓝牙键盘", command=self._write_device, takefocus=False)
@@ -436,7 +437,8 @@ class VoxTripleApp:
                 
             self._tx_power = cfg["tx_power"]
             self._tx_combo.current(self._tx_power)
-            self._sleep_mode.set(bool(cfg["sleep"]))
+            self._sleep_mode.set(bool(cfg.get("sleep", 1)))
+            self._mic_enabled.set(bool(cfg.get("mic_enabled", 1)))
             
             fw_ver = cfg.get("version", "1.0.0")
             self._version_label.configure(text=f"Firmware Version: {fw_ver}")
@@ -463,13 +465,14 @@ class VoxTripleApp:
             mod = _build_modifier(self._btn[i]["mod_vars"])
             mapping.append({"vk": vk, "mod": mod})
             
-        sleep_val = 1 if self._sleep_mode.get() else 0
-        _run_async(self._do_write(mapping, self._tx_power, sleep_val))
+        sleep_val = 1
+        mic_val = 1 if self._mic_enabled.get() else 0
+        _run_async(self._do_write(mapping, self._tx_power, sleep_val, mic_val))
 
-    async def _do_write(self, mapping, tx, sleep):
-        ok = await self.spp.set_config(mapping, tx, sleep)
+    async def _do_write(self, mapping, tx, sleep, mic_enabled):
+        ok = await self.spp.set_config(mapping, tx, sleep, mic_enabled)
         if ok:
-            self.root.after(0, lambda: self._status_text.set("Config written successfully!"))
+            self.root.after(0, lambda: self._status_text.set("Config written! Keyboard is restarting..."))
             # Auto-save local json copy
             self._save_local_file()
         else:
@@ -483,7 +486,8 @@ class VoxTripleApp:
                 "modifier": _build_modifier(self._btn[i]["mod_vars"]),
             }
         self._cfg["tx_power"] = self._tx_power
-        self._cfg["sleep_mode"] = self._sleep_mode.get()
+        self._cfg["sleep_mode"] = True
+        self._cfg["mic_enabled"] = self._mic_enabled.get()
         config_service.save(self._cfg)
 
     # ── Firmware OTA Flashing ─────────────────────────────────────

@@ -102,7 +102,8 @@ class VoxTripleApp:
                 self._btn[i]["mod_vars"][mk].trace_add("write", lambda *a, idx=i: self._update_display(idx))
 
         self._tx_power = self._cfg.get("tx_power", 4)  # plain int, updated via combobox
-        self._sleep_mode = tk.BooleanVar(value=self._cfg.get("sleep_mode", True))
+        self._sleep_mode = tk.BooleanVar(value=True)
+        self._mic_enabled = tk.BooleanVar(value=self._cfg.get("mic_enabled", True))
 
         self._status_text = tk.StringVar(value="Select a COM port and connect.")
         self._last_event_text = tk.StringVar(value="None")
@@ -254,8 +255,8 @@ class VoxTripleApp:
         self._tx_combo.bind("<<ComboboxSelected>>", self._on_tx_power_change)
         self._tx_combo.pack(side="left", padx=4)
         
-        ttk.Label(dev_row, text="Sleep Mode / 睡眠模式:", font=("Helvetica", 9, "bold")).pack(side="left", padx=(16, 4))
-        ttk.Checkbutton(dev_row, text="Enabled / 启用", variable=self._sleep_mode, takefocus=False).pack(side="left")
+        ttk.Label(dev_row, text="Microphone / 麦克风:", font=("Helvetica", 9, "bold")).pack(side="left", padx=(16, 4))
+        ttk.Checkbutton(dev_row, text="Enabled / 启用", variable=self._mic_enabled, takefocus=False).pack(side="left")
 
         # Action: Write to Keyboard
         self._write_btn = ttk.Button(tab_config, text="Write to Keyboard / 写入到蓝牙键盘", command=self._write_device, takefocus=False)
@@ -415,6 +416,9 @@ class VoxTripleApp:
             sl = await self.spp.read_sleep_mode()
             if sl is not None:
                 self._sleep_mode.set(bool(sl))
+            mic = await self.spp.read_mic_enabled()
+            if mic is not None:
+                self._mic_enabled.set(bool(mic))
             ver = await self.spp.read_firmware_version()
             self._version_label.configure(text=f"Firmware: {ver}")
             self._board_version = ver
@@ -453,6 +457,9 @@ class VoxTripleApp:
             sl = await self.spp.read_sleep_mode()
             if sl is not None:
                 self._sleep_mode.set(bool(sl))
+            mic = await self.spp.read_mic_enabled()
+            if mic is not None:
+                self._mic_enabled.set(bool(mic))
             ver = await self.spp.read_firmware_version()
             self._version_label.configure(text=f"Firmware: {ver}")
             self._board_version = ver
@@ -487,11 +494,15 @@ class VoxTripleApp:
         if not ok_tx:
             self._status_text.set("Write TX power failed.")
             return
-        ok_sl = await self.spp.write_sleep_mode(1 if self._sleep_mode.get() else 0)
+        ok_sl = await self.spp.write_sleep_mode(1)
         if not ok_sl:
             self._status_text.set("Write sleep mode failed.")
             return
-        self._status_text.set("Settings written to device.")
+        ok_mic = await self.spp.write_mic_enabled(1 if self._mic_enabled.get() else 0)
+        if not ok_mic:
+            self._status_text.set("Write mic enabled failed.")
+            return
+        self._status_text.set("Settings written! Keyboard is restarting...")
         addr = self.spp.address
         prev = f"Connected: {addr}" if addr else "Ready."
         self.root.after(3000, lambda p=prev: self._status_text.set(p))

@@ -282,6 +282,59 @@ class SppClient:
             return True
         return False
 
+    async def read_mic_enabled(self) -> int | None:
+        """Get the mic enabled flag from cache."""
+        if not self._config_cache:
+            await self._fetch_config()
+        return self._config_cache.get("mic_enabled")
+
+    async def write_mic_enabled(self, enabled: int) -> bool:
+        """Save mic enabled configuration to the ESP32."""
+        resp = await self._send_cmd({
+            "cmd": "set_mic_enabled",
+            "enabled": enabled
+        })
+        if resp and resp.get("status") == "ok":
+            self._config_cache["mic_enabled"] = enabled
+            return True
+        return False
+
+    async def get_config(self) -> dict | None:
+        """Fetch and return full configuration dictionary formatted for macOS UI client."""
+        ok = await self._fetch_config()
+        if ok:
+            cfg = {
+                "buttons": [
+                    {"vk": self._config_cache.get("btn1_vk", 0), "mod": self._config_cache.get("btn1_mod", 0)},
+                    {"vk": self._config_cache.get("btn2_vk", 0), "mod": self._config_cache.get("btn2_mod", 0)},
+                    {"vk": self._config_cache.get("btn3_vk", 0), "mod": self._config_cache.get("btn3_mod", 0)},
+                    {"vk": self._config_cache.get("btn4_vk", 0), "mod": self._config_cache.get("btn4_mod", 0)}
+                ],
+                "tx_power": self._config_cache.get("tx_power", 4),
+                "sleep": self._config_cache.get("sleep_mode", 1),
+                "mic_enabled": self._config_cache.get("mic_enabled", 1),
+                "version": self._config_cache.get("version", "1.0.0")
+            }
+            return cfg
+        return None
+
+    async def set_config(self, mapping: list, tx: int, sleep: int, mic_enabled: int = 1) -> bool:
+        """macOS helper to write all configurations at once."""
+        for i in range(min(len(mapping), 4)):
+            ok = await self.write_button_mapping(i, mapping[i]["vk"], mapping[i]["mod"])
+            if not ok:
+                return False
+        ok = await self.write_tx_power(tx)
+        if not ok:
+            return False
+        ok = await self.write_sleep_mode(sleep)
+        if not ok:
+            return False
+        ok = await self.write_mic_enabled(mic_enabled)
+        if not ok:
+            return False
+        return True
+
     async def read_firmware_version(self) -> str:
         """Get the current firmware version from cache."""
         if not self._config_cache:

@@ -33,7 +33,7 @@ static const char *TAG = "BTN_HANDLER";
 #define BUTTON_TASK_STACK    4096
 #define BUTTON_TASK_PRIORITY 3
 
-#define INDICATOR_LED_GPIO   GPIO_NUM_18
+#define INDICATOR_LED_GPIO   GPIO_NUM_16
 #define INACTIVITY_MS        (30 * 60 * 1000)  /* 30 min deep sleep timeout */
 
 static TimerHandle_t s_inactivity_timer = NULL;
@@ -68,7 +68,7 @@ static bool is_rtc_gpio(gpio_num_t gpio)
 /* Enter sleep — adaptive selection of Deep Sleep or Light Sleep based on RTC IO capability. */
 static void inactivity_sleep_cb(TimerHandle_t xTimer)
 {
-    gpio_num_t wakeup_pin = CONFIG_BUTTON_2_GPIO;
+    gpio_num_t wakeup_pin = CONFIG_BUTTON_1_GPIO;
     bool can_deep_sleep = is_rtc_gpio(wakeup_pin);
 
     if (can_deep_sleep) {
@@ -208,9 +208,9 @@ static void button_task_func(void *arg)
                         get_button_mapping(i, &vk, &mod);
                         classic_hidd_send_key(mod, vk);
                     } else {
-                        // Only Button 2 triggers reconnect
-                        if (i == 1) {
-                            ESP_LOGW(TAG, "Classic BT HID not connected. Button 2 press triggers reconnect...");
+                        // Only Button 1 triggers reconnect
+                        if (i == 0) {
+                            ESP_LOGW(TAG, "Classic BT HID not connected. Button 1 press triggers reconnect...");
                             esp_bd_addr_t saved_addr;
                             if (config_storage_load_hfp_addr(saved_addr) == ESP_OK) {
                                 ESP_LOGI(TAG, "Saved host address found. Initiating reconnect to Host...");
@@ -308,6 +308,13 @@ void button_handler_init(void)
                                        pdMS_TO_TICKS(INACTIVITY_MS),
                                        pdFALSE, NULL, inactivity_sleep_cb);
     if (s_inactivity_timer) xTimerStart(s_inactivity_timer, 0);
+
+    /* Flash LED 3 times quickly as visual wakeup feedback on boot */
+    for (int i = 0; i < 6; i++) {
+        gpio_set_level(INDICATOR_LED_GPIO, (i % 2 == 0) ? 1 : 0);
+        vTaskDelay(pdMS_TO_TICKS(100));
+    }
+    gpio_set_level(INDICATOR_LED_GPIO, 0);
 
     ESP_LOGI(TAG, "Button handler initialized");
 }

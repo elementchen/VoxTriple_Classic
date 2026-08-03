@@ -52,6 +52,20 @@ void config_storage_init(void)
                      i + 1, vk_code, modifier);
         }
     }
+
+    /* Initialize sleep_mode default configuration (default to 1) */
+    uint8_t sleep_mode = 0;
+    if (config_storage_load_sleep_mode(&sleep_mode) != ESP_OK) {
+        ESP_LOGI(TAG, "Sleep mode: no saved config, setting default (enabled)");
+        config_storage_save_sleep_mode(1);
+    }
+
+    /* Initialize mic_enabled default configuration (default to 1) */
+    uint8_t mic_enabled = 0;
+    if (config_storage_load_mic_enabled(&mic_enabled) != ESP_OK) {
+        ESP_LOGI(TAG, "Mic enabled: no saved config, setting default (enabled)");
+        config_storage_save_mic_enabled(1);
+    }
 }
 
 esp_err_t config_storage_save_button(uint8_t button_id, uint8_t vk_code, uint8_t modifier)
@@ -204,6 +218,34 @@ esp_err_t config_storage_load_sleep_mode(uint8_t *enabled)
     if (ret != ESP_OK) return ret;
 
     ret = nvs_get_u8(nvs_handle, NVS_KEY_SLEEP_MODE, enabled);
+    nvs_close(nvs_handle);
+    return ret;
+}
+
+esp_err_t config_storage_save_mic_enabled(uint8_t enabled)
+{
+    nvs_handle_t nvs_handle;
+    esp_err_t ret = nvs_open(NVS_NAMESPACE, NVS_READWRITE, &nvs_handle);
+    if (ret != ESP_OK) return ret;
+
+    ret = nvs_set_u8(nvs_handle, NVS_KEY_MIC_ENABLED, enabled);
+    if (ret == ESP_OK) nvs_commit(nvs_handle);
+    nvs_close(nvs_handle);
+    if (ret == ESP_OK) {
+        ESP_LOGI(TAG, "Mic enabled configuration saved: %d", enabled);
+    }
+    return ret;
+}
+
+esp_err_t config_storage_load_mic_enabled(uint8_t *enabled)
+{
+    if (!enabled) return ESP_ERR_INVALID_ARG;
+
+    nvs_handle_t nvs_handle;
+    esp_err_t ret = nvs_open(NVS_NAMESPACE, NVS_READONLY, &nvs_handle);
+    if (ret != ESP_OK) return ret;
+
+    ret = nvs_get_u8(nvs_handle, NVS_KEY_MIC_ENABLED, enabled);
     nvs_close(nvs_handle);
     return ret;
 }
