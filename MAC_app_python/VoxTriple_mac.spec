@@ -2,7 +2,7 @@
 
 import os, sys
 # Add shared modules path so PyInstaller can find them
-_shared = os.path.join(os.path.dirname(__file__), '..', 'windows_app_python')
+_shared = os.path.join(SPECPATH, '..', 'windows_app_python')
 if os.path.isdir(_shared):
     sys.path.insert(0, os.path.abspath(_shared))
 
