@@ -42,15 +42,21 @@ jobs:
           cd MAC_app_python
           pyinstaller --clean -y VoxTriple_mac.spec
 
-          # 3. Compress the VoxTriple.app folder to zip
+          # 3. Build standalone CLI executable
+          pyinstaller --clean -y --onefile --noconsole --name=VoxTriple_mac_cli -p ../windows_app_python vox_triple_mac.py
+
+          # 4. Compress both targets to zip
           cd dist
           zip -r VoxTriple_mac_v${VER}.zip VoxTriple.app
-          echo "Zipped executable successfully: VoxTriple_mac_v${VER}.zip"
+          zip -j VoxTriple_mac_cli_v${VER}.zip VoxTriple_mac_cli
+          echo "Zipped executables successfully."
 
       - name: Upload macOS App Zip Asset to Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ env.PROJECT_VERSION }}
-          files: MAC_app_python/dist/VoxTriple_mac_v${{ env.PROJECT_VERSION }}.zip
+          files: |
+            MAC_app_python/dist/VoxTriple_mac_v${{ env.PROJECT_VERSION }}.zip
+            MAC_app_python/dist/VoxTriple_mac_cli_v${{ env.PROJECT_VERSION }}.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

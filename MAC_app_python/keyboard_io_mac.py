@@ -14,7 +14,16 @@ from pynput.keyboard import Key, KeyCode
 log = logging.getLogger(__name__)
 
 # ── Simulation: Windows VK → pynput Key ───────────────────────────
-_controller = keyboard.Controller()
+_controller = None
+
+def get_controller():
+    global _controller
+    if _controller is None:
+        try:
+            _controller = keyboard.Controller()
+        except Exception as e:
+            log.error(f"Failed to initialize pynput keyboard Controller: {e}")
+    return _controller
 
 # Modifier VK → Mac modifier keys
 _MOD_VK_TO_KEY = {
@@ -59,37 +68,43 @@ def _vk_to_key(vk: int):
 
 def key_down(vk: int, modifier: int = 0):
     """Press key + modifiers on macOS."""
+    ctrl = get_controller()
+    if not ctrl:
+        return
     try:
         # Press modifiers first (order: ctrl, shift, alt, cmd)
-        if modifier & 0x01: _controller.press(Key.ctrl_l)
-        if modifier & 0x02: _controller.press(Key.shift_l)
-        if modifier & 0x04: _controller.press(Key.alt_l)
-        if modifier & 0x08: _controller.press(Key.cmd_l)
-        if modifier & 0x10: _controller.press(Key.ctrl_r)
-        if modifier & 0x20: _controller.press(Key.shift_r)
-        if modifier & 0x40: _controller.press(Key.alt_r)
-        if modifier & 0x80: _controller.press(Key.cmd_r)
+        if modifier & 0x01: ctrl.press(Key.ctrl_l)
+        if modifier & 0x02: ctrl.press(Key.shift_l)
+        if modifier & 0x04: ctrl.press(Key.alt_l)
+        if modifier & 0x08: ctrl.press(Key.cmd_l)
+        if modifier & 0x10: ctrl.press(Key.ctrl_r)
+        if modifier & 0x20: ctrl.press(Key.shift_r)
+        if modifier & 0x40: ctrl.press(Key.alt_r)
+        if modifier & 0x80: ctrl.press(Key.cmd_r)
         key = _vk_to_key(vk)
         if key:
-            _controller.press(key)
+            ctrl.press(key)
     except Exception as e:
         log.error(f"key_down error: {e}")
 
 
 def key_up(vk: int, modifier: int = 0):
     """Release key + modifiers on macOS."""
+    ctrl = get_controller()
+    if not ctrl:
+        return
     try:
         key = _vk_to_key(vk)
         if key:
-            _controller.release(key)
-        if modifier & 0x80: _controller.release(Key.cmd_r)
-        if modifier & 0x40: _controller.release(Key.alt_r)
-        if modifier & 0x20: _controller.release(Key.shift_r)
-        if modifier & 0x10: _controller.release(Key.ctrl_r)
-        if modifier & 0x08: _controller.release(Key.cmd_l)
-        if modifier & 0x04: _controller.release(Key.alt_l)
-        if modifier & 0x02: _controller.release(Key.shift_l)
-        if modifier & 0x01: _controller.release(Key.ctrl_l)
+            ctrl.release(key)
+        if modifier & 0x80: ctrl.release(Key.cmd_r)
+        if modifier & 0x40: ctrl.release(Key.alt_r)
+        if modifier & 0x20: ctrl.release(Key.shift_r)
+        if modifier & 0x10: ctrl.release(Key.ctrl_r)
+        if modifier & 0x08: ctrl.release(Key.cmd_l)
+        if modifier & 0x04: ctrl.release(Key.alt_l)
+        if modifier & 0x02: ctrl.release(Key.shift_l)
+        if modifier & 0x01: ctrl.release(Key.ctrl_l)
     except Exception as e:
         log.error(f"key_up error: {e}")
 
