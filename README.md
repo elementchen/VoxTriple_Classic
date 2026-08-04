@@ -65,10 +65,9 @@
 
 | Component 组件 | Model 型号 | Qty 数量 |
 |---------------|-----------|---------|
-| Dev Board 开发板 | NodeMCU-32S (ESP32-WROOM-32) | 1 |
+| Dev Board 开发板 | WEMOS ESP32 (18650 Battery Holder) | 1 |
 | Microphone 麦克风 | INMP441 MEMS I2S module | 1 |
 | Buttons 按钮 | 6×6mm tactile switch / 轻触开关 | 4 |
-| LED 指示灯 | Blue LED / 蓝色 3mm 发光二极管 | 1 |
 
 ---
 
@@ -84,14 +83,14 @@ INMP441 (麦克风) → ESP32:
   SCK  → GPIO 21       Serial Clock (BCLK / SCK)
 
 Buttons (按键) → ESP32:
-  Button 1 → GPIO 4     Key 1 (Default: Enter / 回车)
-  Button 2 → GPIO 16    Key 2 (Default: Esc / 退出)
+  Button 1 → GPIO 4     PTT语音 / 深度睡眠唤醒键 (Default: Enter / 回车)
+  Button 2 → GPIO 18    Key 2 (Default: Esc / 退出)
   Button 3 → GPIO 19    Key 3 (Default: Space / 空格)
   Button 4 → GPIO 23    Key 4 (Default: Tab / 制表键) [长按 3 秒擦除蓝牙绑定并重启]
 
-Status LED (录音状态指示灯) → ESP32:
-  Anode (正极)   → GPIO 18    Connect a 220Ω current-limiting resistor / 经 220Ω 限流电阻接 GPIO
-  Cathode (负极) → GND
+Onboard LED (板载蓝色贴片指示灯) → ESP32:
+  - 物理固化在 GPIO 16 上，无需任何外部接线与电阻！
+  - 低电平有效 (Active Low)，由代码自动控制，在 Button 1 按下说话时亮起指示，松开时熄灭。
 
 * All buttons are active-low (GPIO → Button → GND) with internal pull-up enabled.
 * 所有按键均为低电平有效，接线方式为 GPIO 引脚接按键再到 GND，使用内部上拉。
