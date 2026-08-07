@@ -606,6 +606,8 @@ class VoxTripleApp:
                 self.root.after(0, self._compare_and_update_version_ui)
         except Exception as e:
             log.error(f"Failed to check GitHub version: {e}")
+            self.root.after(0, lambda: self._new_ver_label.configure(text="(云端版本获取失败/限流)", foreground="gray"))
+            self.root.after(0, lambda: self._new_ver_label.pack(side="left", padx=8))
 
     def _compare_and_update_version_ui(self):
         # Clean existing dynamic labels and buttons
