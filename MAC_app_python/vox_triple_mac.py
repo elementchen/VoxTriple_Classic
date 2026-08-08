@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """VoxTriple — ESP32 BT Microphone Config (macOS)
 
 Shares spp_client.py, config_service.py with the Windows version.
@@ -6,7 +7,7 @@ Keyboard I/O is Mac-specific (keyboard_io_mac.py).
 Wired config and OTA firmware flashing are handled via physical USB Serial.
 Requires Accessibility permission in System Settings for keyboard capture.
 """
-import sys, os, asyncio, logging, tkinter as tk
+import sys, os, asyncio, logging, json, urllib.request, tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 
 # Import shared modules from sibling windows_app_python directory

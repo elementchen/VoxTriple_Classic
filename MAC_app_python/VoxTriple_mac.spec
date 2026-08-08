@@ -11,7 +11,13 @@ a = Analysis(
     pathex=[_shared],
     binaries=[],
     datas=[],
-    hiddenimports=['bleak.backends.corebluetooth', 'pynput.keyboard._darwin'],
+    hiddenimports=[
+        'bleak.backends.corebluetooth',
+        'pynput.keyboard._darwin',
+        'pynput.mouse._darwin',
+        'urllib.request',
+        'json',
+    ],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
@@ -57,6 +63,7 @@ app = BUNDLE(
     info_plist={
         'NSHighResolutionCapable': True,
         'NSBluetoothAlwaysUsageDescription': 'VoxTriple uses Bluetooth to configure your ESP32 BT Microphone.',
+        'NSAccessibilityUsageDescription': 'VoxTriple needs Accessibility permissions to capture physical keyboard shortcuts.',
         'LSBackgroundOnly': False,
     },
 )

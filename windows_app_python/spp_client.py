@@ -1,3 +1,4 @@
+from __future__ import annotations
 """Classic Bluetooth SPP Client for VoxTriple.
 
 Replaces the BleClient (ble_client.py) using pyserial.

@@ -1,3 +1,4 @@
+from __future__ import annotations
 """Mac keyboard capture and simulation via pynput.
 
 Capture: pynput.keyboard.Listener with on_press callback.
@@ -37,22 +38,32 @@ _MOD_VK_TO_KEY = {
     0x5C: Key.cmd_r,    # VK_RWin   → Command (right)
 }
 
+def _safe_key(name: str):
+    return getattr(Key, name, None)
+
+
 # Standard VK → pynput Key (non-printable special keys)
-_VK_TO_KEY = {
-    0x08: Key.backspace, 0x09: Key.tab,      0x0D: Key.enter,
-    0x1B: Key.esc,       0x20: Key.space,    0x2E: Key.delete,
-    0x21: Key.page_up,   0x22: Key.page_down, 0x23: Key.end,
-    0x24: Key.home,      0x25: Key.left,     0x26: Key.up,
-    0x27: Key.right,     0x28: Key.down,     0x2D: Key.insert,
-    0x2C: Key.print_screen, 0x13: Key.pause,
-    0x14: Key.caps_lock, 0x90: Key.num_lock,
+_VK_TO_KEY = {}
+for vk, k in [
+    (0x08, _safe_key("backspace")), (0x09, _safe_key("tab")), (0x0D, _safe_key("enter")),
+    (0x1B, _safe_key("esc")), (0x20, _safe_key("space")), (0x2E, _safe_key("delete")),
+    (0x21, _safe_key("page_up")), (0x22, _safe_key("page_down")), (0x23, _safe_key("end")),
+    (0x24, _safe_key("home")), (0x25, _safe_key("left")), (0x26, _safe_key("up")),
+    (0x27, _safe_key("right")), (0x28, _safe_key("down")), (0x2D, _safe_key("insert")),
+    (0x2C, _safe_key("print_screen")), (0x13, _safe_key("pause")),
+    (0x14, _safe_key("caps_lock")), (0x90, _safe_key("num_lock")),
+    (0x70, _safe_key("f1")), (0x71, _safe_key("f2")), (0x72, _safe_key("f3")), (0x73, _safe_key("f4")),
+    (0x74, _safe_key("f5")), (0x75, _safe_key("f6")), (0x76, _safe_key("f7")), (0x77, _safe_key("f8")),
+    (0x78, _safe_key("f9")), (0x79, _safe_key("f10")), (0x7A, _safe_key("f11")), (0x7B, _safe_key("f12")),
+]:
+    if k is not None:
+        _VK_TO_KEY[vk] = k
+
+_VK_TO_KEY.update({
     0x6A: KeyCode.from_char("*"), 0x6B: KeyCode.from_char("+"),
     0x6D: KeyCode.from_char("-"), 0x6E: KeyCode.from_char("."),
     0x6F: KeyCode.from_char("/"),
-    0x70: Key.f1,  0x71: Key.f2,  0x72: Key.f3,  0x73: Key.f4,
-    0x74: Key.f5,  0x75: Key.f6,  0x76: Key.f7,  0x77: Key.f8,
-    0x78: Key.f9,  0x79: Key.f10, 0x7A: Key.f11, 0x7B: Key.f12,
-}
+})
 
 
 def _vk_to_key(vk: int):
@@ -115,30 +126,21 @@ _capture_callback = None
 
 
 # Reverse mapping: pynput Key → VK (for capture / key learning)
-_KEY_TO_VK = {
-    Key.backspace: 0x08, Key.tab: 0x09,       Key.enter: 0x0D,
-    Key.esc: 0x1B,       Key.space: 0x20,     Key.delete: 0x2E,
-    Key.page_up: 0x21,   Key.page_down: 0x22, Key.end: 0x23,
-    Key.home: 0x24,      Key.left: 0x25,      Key.up: 0x26,
-    Key.right: 0x27,     Key.down: 0x28,      Key.insert: 0x2D,
-    Key.print_screen: 0x2C, Key.pause: 0x13,
-    Key.caps_lock: 0x14, Key.num_lock: 0x90,
-    Key.ctrl_l: 0xA2,    Key.ctrl_r: 0xA3,
-    Key.shift_l: 0xA0,   Key.shift_r: 0xA1,
-    Key.alt_l: 0xA4,     Key.alt_r: 0xA5,
-    Key.cmd_l: 0x5B,     Key.cmd_r: 0x5C,
-    Key.f1: 0x70,  Key.f2: 0x71,  Key.f3: 0x72,  Key.f4: 0x73,
-    Key.f5: 0x74,  Key.f6: 0x75,  Key.f7: 0x76,  Key.f8: 0x77,
-    Key.f9: 0x78,  Key.f10: 0x79, Key.f11: 0x7A, Key.f12: 0x7B,
-}
-
-# Additional Mac-specific key → VK
-_KEY_TO_VK[Key.media_volume_mute] = 0xAD
-_KEY_TO_VK[Key.media_volume_down] = 0xAE
-_KEY_TO_VK[Key.media_volume_up] = 0xAF
-_KEY_TO_VK[Key.media_play_pause] = 0xB3
-_KEY_TO_VK[Key.media_next] = 0xB0
-_KEY_TO_VK[Key.media_previous] = 0xB1
+_KEY_TO_VK = {v: k for k, v in _VK_TO_KEY.items() if isinstance(v, Key)}
+for k, vk in [
+    (_safe_key("ctrl_l"), 0xA2), (_safe_key("ctrl_r"), 0xA3),
+    (_safe_key("shift_l"), 0xA0), (_safe_key("shift_r"), 0xA1),
+    (_safe_key("alt_l"), 0xA4), (_safe_key("alt_r"), 0xA5),
+    (_safe_key("cmd_l"), 0x5B), (_safe_key("cmd_r"), 0x5C),
+    (_safe_key("media_volume_mute"), 0xAD),
+    (_safe_key("media_volume_down"), 0xAE),
+    (_safe_key("media_volume_up"), 0xAF),
+    (_safe_key("media_play_pause"), 0xB3),
+    (_safe_key("media_next"), 0xB0),
+    (_safe_key("media_previous"), 0xB1),
+]:
+    if k is not None:
+        _KEY_TO_VK[k] = vk
 
 
 def _key_to_vk(key) -> int | None:
