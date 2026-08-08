@@ -7,7 +7,31 @@ Keyboard I/O is Mac-specific (keyboard_io_mac.py).
 Wired config and OTA firmware flashing are handled via physical USB Serial.
 Requires Accessibility permission in System Settings for keyboard capture.
 """
-import sys, os, asyncio, logging, json, urllib.request, tkinter as tk
+import sys, os
+
+# Setup Tcl/Tk environment paths for PyInstaller macOS bundle under LaunchServices
+if getattr(sys, 'frozen', False):
+    meipass = getattr(sys, '_MEIPASS', '')
+    if "TCL_LIBRARY" not in os.environ:
+        for candidate in [
+            os.path.join(meipass, "tcl"),
+            "/System/Library/Frameworks/Tcl.framework/Resources/Scripts",
+            "/System/Library/Frameworks/Tcl.framework/Versions/8.6/Resources/Scripts",
+        ]:
+            if os.path.isdir(candidate):
+                os.environ["TCL_LIBRARY"] = candidate
+                break
+    if "TK_LIBRARY" not in os.environ:
+        for candidate in [
+            os.path.join(meipass, "tk"),
+            "/System/Library/Frameworks/Tk.framework/Resources/Scripts",
+            "/System/Library/Frameworks/Tk.framework/Versions/8.6/Resources/Scripts",
+        ]:
+            if os.path.isdir(candidate):
+                os.environ["TK_LIBRARY"] = candidate
+                break
+
+import asyncio, logging, json, urllib.request, tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 
 # Import shared modules from sibling windows_app_python directory

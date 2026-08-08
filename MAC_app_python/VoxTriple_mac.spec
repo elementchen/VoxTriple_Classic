@@ -6,11 +6,21 @@ _shared = os.path.join(SPECPATH, '..', 'windows_app_python')
 if os.path.isdir(_shared):
     sys.path.insert(0, os.path.abspath(_shared))
 
+extra_datas = []
+for tcl_p in ["/System/Library/Frameworks/Tcl.framework/Resources/Scripts", "/System/Library/Frameworks/Tcl.framework/Versions/8.6/Resources/Scripts"]:
+    if os.path.isdir(tcl_p):
+        extra_datas.append((tcl_p, 'tcl'))
+        break
+for tk_p in ["/System/Library/Frameworks/Tk.framework/Resources/Scripts", "/System/Library/Frameworks/Tk.framework/Versions/8.6/Resources/Scripts"]:
+    if os.path.isdir(tk_p):
+        extra_datas.append((tk_p, 'tk'))
+        break
+
 a = Analysis(
     ['vox_triple_mac.py'],
     pathex=[_shared],
     binaries=[],
-    datas=[],
+    datas=extra_datas,
     hiddenimports=[
         'bleak.backends.corebluetooth',
         'pynput.keyboard._darwin',
