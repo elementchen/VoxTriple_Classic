@@ -37,6 +37,7 @@ class SppClient:
         # OTA mode flag and queue for flow control
         self._ota_mode = False
         self._ota_queue = asyncio.Queue()
+        self._ser_lock = threading.Lock()
 
     @property
     def is_connected(self) -> bool:
@@ -138,10 +139,13 @@ class SppClient:
         log.info("SPP Client disconnected")
 
     def _run_read_loop(self):
-        """Thread worker to continuously read from the serial port line by line."""
+        """Thread worker to continuously read from the serial port line by line with thread-safe locking."""
         while self._connected and self._ser:
             try:
-                line_bytes = self._ser.readline()
+                with self._ser_lock:
+                    if not self._ser:
+                        break
+                    line_bytes = self._ser.readline()
                 if not line_bytes:
                     continue
                     
@@ -199,7 +203,10 @@ class SppClient:
         
         try:
             cmd_str = json.dumps(cmd_dict) + "\n"
-            self._ser.write(cmd_str.encode("utf-8"))
+            with self._ser_lock:
+                if self._ser:
+                    self._ser.write(cmd_str.encode("utf-8"))
+                    self._ser.flush()
             
             # Wait for response future to resolve
             resp = await asyncio.wait_for(self._response_future, timeout=timeout)
@@ -381,8 +388,10 @@ class SppClient:
                 chunk = bin_data[i:i+chunk_size]
                 expected_total = i + len(chunk)
                 
-                self._ser.write(chunk)
-                self._ser.flush()  # Force OS port to instantly emit binary buffer
+                with self._ser_lock:
+                    if self._ser:
+                        self._ser.write(chunk)
+                        self._ser.flush()  # Force OS port to instantly emit binary buffer
                 
                 # Precise math check loop to ensure alignment and prevent phase-shift deadlocks
                 retry_count = 0
