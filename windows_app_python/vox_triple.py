@@ -558,9 +558,9 @@ class VoxTripleApp:
     async def _do_ota(self, bin_path):
         def progress_cb(written, total):
             pct = (written / total) * 100
-            self.root.after(0, lambda: self._ota_progress_var.set(pct))
-            self.root.after(0, lambda: self._ota_status_text.set(
-                f"Flashing: {written}/{total} bytes ({pct:.1f}%)"
+            self.root.after(0, lambda p=pct: self._ota_progress_var.set(p))
+            self.root.after(0, lambda p=pct, w=written, t=total: self._ota_status_text.set(
+                f"Flashing: {w}/{t} bytes ({p:.1f}%)"
             ))
 
         ok = await self.spp.upload_firmware(bin_path, progress_cb)
@@ -720,10 +720,15 @@ class VoxTripleApp:
         filename = f"esp32_bt_mic_v{self._github_version}.bin"
         save_path = os.path.join(cache_dir, filename)
         
-        # Check cache
-        if os.path.exists(save_path):
+        # Check cache (ensure validity > 500KB)
+        if os.path.exists(save_path) and os.path.getsize(save_path) > 500000:
             self.root.after(0, lambda: self._ota_status_text.set("Found cached bin. Flashing..."))
         else:
+            if os.path.exists(save_path):
+                try:
+                    os.remove(save_path)
+                except Exception:
+                    pass
             # Download from GitHub
             self.root.after(0, lambda: self._ota_status_text.set("Downloading latest firmware..."))
             try:

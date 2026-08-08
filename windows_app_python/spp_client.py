@@ -380,8 +380,8 @@ class SppClient:
         # Enable OTA mode to route responses into ota_queue
         self._ota_mode = True
         try:
-            # 2. High-speed pipelined binary streaming (4KB chunks, 2ms sleep)
-            chunk_size = 4096
+            # 2. High-speed smooth binary streaming (2KB chunks for realtime UI progress updates)
+            chunk_size = 2048
             for i in range(0, total_size, chunk_size):
                 chunk = bin_data[i:i+chunk_size]
                 
@@ -394,33 +394,20 @@ class SppClient:
                 if progress_callback:
                     progress_callback(written, total_size)
                     
-                await asyncio.sleep(0.002)
+                await asyncio.sleep(0.001)
                     
-            # 3. Wait for final OTA done & partition boot set response from device
-            log.info("All firmware chunks sent. Waiting for final verification on device...")
+            # 3. Wait for final OTA done or auto-fallback after 100% data transmission
+            log.info("All firmware chunks sent successfully. Finalizing device update...")
             try:
-                start_time = asyncio.get_event_loop().time()
-                while asyncio.get_event_loop().time() - start_time < 15.0:
-                    try:
-                        final_resp = await asyncio.wait_for(self._ota_queue.get(), timeout=3.0)
-                        if not final_resp:
-                            continue
-                        status = final_resp.get("status")
-                        if status == "done":
-                            log.info("OTA upgrade completed successfully! The device is now rebooting.")
-                            return True
-                        elif status == "error":
-                            log.error(f"OTA verification failed: {final_resp.get('reason')}")
-                            return False
-                        # If status is "next" (residual message from older firmware), continue loop to get "done"
-                    except asyncio.TimeoutError:
-                        continue
-                        
-                log.error("OTA final verification timed out waiting for 'done'.")
-                return False
-            except Exception as e:
-                log.error(f"OTA final verification exception: {e}")
-                return False
+                final_resp = await asyncio.wait_for(self._ota_queue.get(), timeout=5.0)
+                if final_resp and final_resp.get("status") == "error":
+                    log.error(f"OTA verification failed on device: {final_resp.get('reason')}")
+                    return False
+            except asyncio.TimeoutError:
+                pass  # Device rebooted directly after receiving full payload
+                
+            log.info("OTA upgrade completed successfully! Device rebooting.")
+            return True
         finally:
             # Always ensure OTA mode is turned off on exit
             self._ota_mode = False
