@@ -5,8 +5,16 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 cd "$SCRIPT_DIR"
 
 echo "=== 1. Creating Virtual Environment ==="
-if [ ! -d "venv" ]; then
-    python3 -m venv venv
+if [ -x "/opt/homebrew/bin/python3.12" ]; then
+    if [ ! -d "venv" ] || [ ! -f "venv/bin/python" ] || [[ "$(venv/bin/python --version)" != *"3.12"* ]]; then
+        echo "Recreating virtual environment with Homebrew Python 3.12..."
+        rm -rf venv
+        /opt/homebrew/bin/python3.12 -m venv venv
+    fi
+else
+    if [ ! -d "venv" ]; then
+        python3 -m venv venv
+    fi
 fi
 source venv/bin/activate
 
