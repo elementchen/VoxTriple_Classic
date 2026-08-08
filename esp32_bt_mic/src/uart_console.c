@@ -94,17 +94,7 @@ static void handle_ota_binary_data(const uint8_t *data, size_t len)
         return;
     }
     
-    size_t prev_received = s_ota_received_size;
     s_ota_received_size += len;
-    
-    // Throttled acknowledgment scheme based on absolute byte counts to ensure 100% phase-shift protection
-    bool cross_boundary = (s_ota_received_size / 1024) > (prev_received / 1024);
-    bool is_last = (s_ota_received_size >= s_ota_total_size);
-    if (cross_boundary || is_last) {
-        char resp[128];
-        snprintf(resp, sizeof(resp), "{\"status\":\"next\",\"written\":%d,\"total_written\":%d}\n", (int)(s_ota_received_size - prev_received), (int)s_ota_received_size);
-        write(1, resp, strlen(resp));
-    }
     
     // Verify if download completed
     if (s_ota_received_size >= s_ota_total_size) {
