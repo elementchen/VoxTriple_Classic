@@ -31,6 +31,15 @@ if getattr(sys, 'frozen', False):
                 os.environ["TK_LIBRARY"] = candidate
                 break
 
+# Ensure Cocoa NSApplication is initialized under macOS LaunchServices before Tkinter initialization
+try:
+    import AppKit
+    app = AppKit.NSApplication.sharedApplication()
+    app.setActivationPolicy_(AppKit.NSApplicationActivationPolicyRegular)
+    app.activateIgnoringOtherApps_(True)
+except Exception as e:
+    pass
+
 import asyncio, logging, json, urllib.request, tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 
