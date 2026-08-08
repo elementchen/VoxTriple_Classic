@@ -178,8 +178,8 @@ esp_err_t uart_console_init(void)
     };
     uart_param_config(0, &uart_config);
 
-    // 2. Install the hardware UART driver with a large 2048-byte RingBuffer
-    uart_driver_install(0, 2048, 0, 0, NULL, 0);
+    // 2. Install the hardware UART driver with a large 4096-byte RingBuffer for smooth OTA
+    uart_driver_install(0, 4096, 0, 0, NULL, 0);
 
     // 3. Bind VFS stdout/stderr descriptors so log printing still routes correctly
     esp_vfs_dev_uart_use_driver(0);

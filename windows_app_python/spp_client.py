@@ -374,7 +374,7 @@ class SppClient:
         self._ota_mode = True
         
         try:
-            # 2. Loop to write binary chunks with flow control
+            # 2. Loop to write binary chunks with smooth flow control
             chunk_size = 1024
             current_total = 0
             for i in range(0, total_size, chunk_size):
@@ -385,6 +385,7 @@ class SppClient:
                 self._ser.flush()  # Force OS port to instantly emit binary buffer
                 
                 # Precise math check loop to ensure alignment and prevent phase-shift deadlocks
+                retry_count = 0
                 while current_total < expected_total:
                     try:
                         # Wait for the next chunk response from queue
@@ -396,14 +397,17 @@ class SppClient:
                         # Update currently confirmed bytes on board
                         current_total = chunk_resp.get("total_written", 0)
                     except asyncio.TimeoutError:
-                        log.error(f"OTA chunk write timed out waiting for {expected_total} bytes. Current confirmed: {current_total}")
-                        return False
+                        retry_count += 1
+                        if retry_count >= 2:
+                            log.error(f"OTA chunk write timed out waiting for {expected_total} bytes. Current confirmed: {current_total}")
+                            return False
+                        log.warning(f"OTA chunk wait retry {retry_count} for {expected_total} bytes...")
                     
                 if progress_callback:
                     progress_callback(current_total, total_size)
                     
-                # Yield control for 2ms to prevent UART FIFO overflow and allow flash writing
-                await asyncio.sleep(0.002)
+                # Yield control for 15ms to prevent UART FIFO overflow during Flash Sector erasure
+                await asyncio.sleep(0.015)
                     
             # 3. Wait for final OTA done & partition boot set response
             log.info("All firmware chunks sent. Waiting for final verification on device...")
