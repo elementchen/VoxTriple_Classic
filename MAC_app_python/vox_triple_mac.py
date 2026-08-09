@@ -616,7 +616,7 @@ class VoxTripleApp:
 
     # ── Cloud update & OTA operations ─────────────────────────────
     async def _check_github_version(self):
-        url = "https://api.github.com/repos/elementchen/VoxTriple_Classic/releases/latest"
+        url = "https://raw.githubusercontent.com/elementchen/VoxTriple_Classic/main/version.json"
         headers = {"User-Agent": "VoxTriple-App"}
         req = urllib.request.Request(url, headers=headers, method="GET")
         try:
@@ -624,22 +624,15 @@ class VoxTripleApp:
             response = await loop.run_in_executor(None, lambda: urllib.request.urlopen(req).read().decode())
             data = json.loads(response)
             
-            tag_name = data.get("tag_name", "")
-            version_str = tag_name.lstrip("v")
-            
-            bin_url = None
-            for asset in data.get("assets", []):
-                name = asset.get("name", "")
-                if name.startswith("esp32_bt_mic_v") and name.endswith(".bin") and "merged" not in name:
-                    bin_url = asset.get("browser_download_url")
-                    break
+            version_str = data.get("version", "")
+            bin_url = data.get("bin_url", "")
             
             if version_str and bin_url:
                 self._github_version = version_str
                 self._github_bin_url = bin_url
                 self.root.after(0, self._compare_and_update_version_ui)
         except Exception as e:
-            log.error(f"Failed to check GitHub version: {e}")
+            log.error(f"Failed to check GitHub version via Raw JSON: {e}")
             self.root.after(0, lambda: self._new_ver_label.configure(text="(云端版本获取失败/限流)", foreground="gray"))
             self.root.after(0, lambda: self._new_ver_label.pack(side="left", padx=8))
 
