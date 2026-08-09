@@ -162,7 +162,7 @@ static void uart_rx_task(void *pvParameters)
     ESP_LOGI(TAG, "UART RX Task started using direct hardware ringbuffer");
     while (1) {
         // Direct read bypasses VFS filters, giving us 100% raw binary stream (no Ctrl+C/Ctrl+D filtering)
-        int len = uart_read_bytes(0, data, 1024, pdMS_TO_TICKS(10));
+        int len = uart_read_bytes(0, data, 1024, pdMS_TO_TICKS(50));
         if (len > 0) {
             if (s_rx_mode == UART_RX_MODE_JSON) {
                 handle_uart_data(data, len);
