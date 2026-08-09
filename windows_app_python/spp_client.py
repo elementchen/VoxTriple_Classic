@@ -388,7 +388,6 @@ class SppClient:
                 with self._ser_lock:
                     if self._ser:
                         self._ser.write(chunk)
-                        self._ser.flush()  # Force OS port to instantly emit binary buffer
                 
                 written = min(i + len(chunk), total_size)
                 if progress_callback:
@@ -397,7 +396,12 @@ class SppClient:
                 # Windows Sleep resolution is 15.6ms. Yielding every 8KB (4 blocks) maximizes speed.
                 if i % (chunk_size * 4) == 0:
                     await asyncio.sleep(0.001)
-                    
+            
+            # Flush once at the end to ensure the hardware buffer is fully drained
+            with self._ser_lock:
+                if self._ser:
+                    self._ser.flush()
+                        
             # 3. Wait for final OTA done or auto-fallback after 100% data transmission
             log.info("All firmware chunks sent successfully. Finalizing device update...")
             try:
