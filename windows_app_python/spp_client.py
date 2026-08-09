@@ -434,11 +434,14 @@ class SppClient:
                     expected_total = i + len(chunk)
                     
                     # 1. Pre-emit sync for trailing tail chunk to prevent final block overflow
+                    # Since the ESP32 firmware emits progress packets strictly at 1KB boundaries,
+                    # we synchronize up to the nearest 1KB multiple to prevent handshake deadlocks on fractional blocks.
                     is_last_chunk = (i + chunk_size >= total_size)
                     if is_last_chunk and i > 0:
-                        log.info(f"Syncing prior blocks with board before sending tail chunk (confirmed: {current_total}/{i})...")
+                        target_sync = (i // 1024) * 1024
+                        log.info(f"Syncing prior blocks with board before sending tail chunk (confirmed: {current_total}/{target_sync})...")
                         try:
-                            while current_total < i:
+                            while current_total < target_sync:
                                 chunk_resp = await asyncio.wait_for(self._ota_queue.get(), timeout=8.0)
                                 if chunk_resp:
                                     if chunk_resp.get("status") == "error":
@@ -449,7 +452,7 @@ class SppClient:
                                         return True
                                     current_total = max(current_total, chunk_resp.get("total_written", 0))
                         except asyncio.TimeoutError:
-                            log.error(f"Timeout waiting for sync before tail chunk. Confirmed: {current_total}/{i}")
+                            log.error(f"Timeout waiting for sync before tail chunk. Confirmed: {current_total}/{target_sync}")
                             return False
                         log.info("Sync complete. Emitting trailing fractional chunk...")
                         
@@ -473,9 +476,11 @@ class SppClient:
                             
                     # 3. Synchronize strictly every 4KB (Flash Sector alignment) to prevent Windows serial driver lockup
                     # while ensuring absolute safety against buffer overrun.
+                    # We synchronize up to the nearest 1KB multiple to match ESP32's 1KB ACK boundaries.
                     if i > 0 and i % 4096 == 0:
+                        target_sync = (i // 1024) * 1024
                         try:
-                            while current_total < i:
+                            while current_total < target_sync:
                                 chunk_resp = await asyncio.wait_for(self._ota_queue.get(), timeout=10.0)
                                 if chunk_resp:
                                     if chunk_resp.get("status") == "error":
@@ -486,7 +491,7 @@ class SppClient:
                                         return True
                                     current_total = max(current_total, chunk_resp.get("total_written", 0))
                         except asyncio.TimeoutError:
-                            log.error(f"OTA handshake timeout waiting for {i} bytes. Current confirmed: {current_total}")
+                            log.error(f"OTA handshake timeout waiting for {target_sync} bytes. Current confirmed: {current_total}")
                             return False
                         
                     if progress_callback:
