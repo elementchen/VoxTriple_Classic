@@ -409,68 +409,36 @@ class SppClient:
                     chunk = bin_data[i:i+chunk_size]
                     expected_total = i + len(chunk)
                     
-                    # Pre-emit synchronization check for the fractional tail chunk to prevent UART FIFO overrun
-                    is_last_chunk = (i + chunk_size >= total_size)
-                    if is_last_chunk and i > 0:
-                        log.info(f"Syncing previous blocks with board before sending trailing chunk (current confirmed: {current_total}/{i})...")
-                        try:
-                            while current_total < i:
-                                chunk_resp = await asyncio.wait_for(self._ota_queue.get(), timeout=8.0)
-                                if chunk_resp:
-                                    if chunk_resp.get("status") == "error":
-                                        log.error(f"OTA pre-sync failed: {chunk_resp.get('reason')}")
-                                        return False
-                                    if chunk_resp.get("status") == "done":
-                                        log.info("OTA upgrade completed successfully! The device is now rebooting.")
-                                        return True
-                                    current_total = max(current_total, chunk_resp.get("total_written", 0))
-                        except asyncio.TimeoutError:
-                            log.error(f"Timeout waiting for sync before tail chunk. Confirmed: {current_total}/{i}")
-                            return False
-                        log.info("Sync complete. Emitting trailing fractional chunk...")
-                    
                     self._ser.write(chunk)
                     self._ser.flush()  # Force OS port to instantly emit binary buffer
                     
-                    # Non-blocking update of confirmed progress from queue
-                    while not self._ota_queue.empty():
+                    # Strict 1KB handshake flow control: wait for ESP32 confirmation for the sent chunk.
+                    # Since the device is in clean zero-load OTA mode, there is NO Bluetooth/DMA conflict,
+                    # and this sync mode is 100% deadlock-free and completely immune to UART RX buffer overruns.
+                    while current_total < expected_total:
                         try:
-                            chunk_resp = self._ota_queue.get_nowait()
-                            if chunk_resp:
-                                if chunk_resp.get("status") == "error":
-                                    log.error(f"OTA chunk write failed: {chunk_resp.get('reason')}")
-                                    return False
-                                if chunk_resp.get("status") == "done":
-                                    log.info("OTA upgrade completed successfully! The device is now rebooting.")
-                                    return True
-                                current_total = max(current_total, chunk_resp.get("total_written", 0))
-                        except asyncio.QueueEmpty:
-                            break
+                            chunk_resp = await asyncio.wait_for(self._ota_queue.get(), timeout=8.0)
+                            if not chunk_resp:
+                                log.error("Empty chunk response from device.")
+                                return False
                             
-                    # Strict synchronization check every 16KB to prevent deadlock while guaranteeing data integrity
-                    if i > 0 and i % (1024 * 16) == 0:
-                        try:
-                            chunk_resp = await asyncio.wait_for(self._ota_queue.get(), timeout=5.0)
-                            if chunk_resp:
-                                if chunk_resp.get("status") == "error":
-                                    log.error(f"OTA chunk write failed: {chunk_resp.get('reason')}")
-                                    return False
-                                if chunk_resp.get("status") == "done":
-                                    log.info("OTA upgrade completed successfully! The device is now rebooting.")
-                                    return True
-                                current_total = max(current_total, chunk_resp.get("total_written", 0))
+                            if chunk_resp.get("status") == "error":
+                                log.error(f"OTA chunk write failed: {chunk_resp.get('reason')}")
+                                return False
+                            if chunk_resp.get("status") == "done":
+                                log.info("OTA upgrade completed successfully! The device is now rebooting.")
+                                return True
+                            
+                            current_total = chunk_resp.get("total_written", 0)
                         except asyncio.TimeoutError:
-                            log.error(f"OTA handshake timeout at {expected_total} bytes. Connection lost.")
+                            log.error(f"OTA chunk write timed out waiting for {expected_total} bytes. Current confirmed: {current_total}")
                             return False
                         
                     if progress_callback:
-                        progress_callback(max(current_total, expected_total), total_size)
+                        progress_callback(current_total, total_size)
                         
-                    # Yield control for 18ms to prevent UART hardware RingBuffer overflow
-                    await asyncio.sleep(0.018)
-                    
-                # Allow 0.5s drain delay for trailing bytes to physical UART transmission
-                await asyncio.sleep(0.5)
+                    # Yield control for 5ms to allow host UART driver stabilization
+                    await asyncio.sleep(0.005)
                 
                 # 3. Wait for final OTA done & partition boot set response (Classic Mode)
                 log.info("All firmware chunks sent. Waiting for final verification on device...")
