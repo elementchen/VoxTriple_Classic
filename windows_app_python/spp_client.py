@@ -155,8 +155,29 @@ class SppClient:
                 try:
                     data = json.loads(line)
                 except json.JSONDecodeError:
-                    log.warning(f"[ESP32 LOG (JSON Parse Fail)] {line}")
-                    continue
+                    # Robust fallback parser for noisy serial lines (crosstalk / power ripple bit-flips)
+                    import re
+                    recovered = False
+                    data = {}
+                    if "next" in line:
+                        tw_match = re.search(r'"total_written"\s*:\s*(\d+)', line)
+                        if tw_match:
+                            data = {"status": "next", "total_written": int(tw_match.group(1))}
+                            recovered = True
+                    elif "done" in line:
+                        data = {"status": "done"}
+                        recovered = True
+                    elif "error" in line:
+                        data = {"status": "error"}
+                        reason_match = re.search(r'"reason"\s*:\s*"([^"]+)"', line)
+                        data["reason"] = reason_match.group(1) if reason_match else "unknown_recovered"
+                        recovered = True
+                        
+                    if recovered:
+                        log.warning(f"Recovered JSON structure from noisy line: {line} -> {data}")
+                    else:
+                        log.warning(f"[ESP32 LOG (JSON Parse Fail)] {line}")
+                        continue
                 
                 # Check if it's an unsolicited event from ESP32
                 if "event" in data:
@@ -437,8 +458,8 @@ class SppClient:
                     if progress_callback:
                         progress_callback(current_total, total_size)
                         
-                    # Yield control for 5ms to allow host UART driver stabilization
-                    await asyncio.sleep(0.005)
+                    # Yield control for 10ms to allow host UART driver and power ripple stabilization
+                    await asyncio.sleep(0.010)
                 
                 # 3. Wait for final OTA done & partition boot set response (Classic Mode)
                 log.info("All firmware chunks sent. Waiting for final verification on device...")
