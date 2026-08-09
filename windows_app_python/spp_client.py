@@ -473,7 +473,7 @@ class SppClient:
                     if i > 0 and i % (1024 * 4) == 0:
                         try:
                             while current_total < i:
-                                chunk_resp = await asyncio.wait_for(self._ota_queue.get(), timeout=5.0)
+                                chunk_resp = await asyncio.wait_for(self._ota_queue.get(), timeout=10.0)
                                 if chunk_resp:
                                     if chunk_resp.get("status") == "error":
                                         log.error(f"OTA sync failed: {chunk_resp.get('reason')}")
@@ -489,8 +489,8 @@ class SppClient:
                     if progress_callback:
                         progress_callback(max(current_total, expected_total), total_size)
                         
-                    # Yield control for 10ms to allow host UART driver and power ripple stabilization
-                    await asyncio.sleep(0.010)
+                    # Yield control for 30ms (Power Recovery Delay) to completely stabilize voltage ripples and allow flash writes
+                    await asyncio.sleep(0.030)
                 
                 # 3. Wait for final OTA done & partition boot set response (Classic Mode)
                 log.info("All firmware chunks sent. Waiting for final verification on device...")
