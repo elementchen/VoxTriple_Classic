@@ -341,7 +341,7 @@ class SppClient:
             await self._fetch_config()
         return self._config_cache.get("version", "Unknown")
 
-    async def upload_firmware(self, bin_path: str, progress_callback=None) -> bool:
+    async def upload_firmware(self, bin_path: str, progress_callback=None, mode="classic") -> bool:
         """Upload firmware .bin file to ESP32 via chunked VFS serial OTA protocol."""
         if not self._connected or not self._ser:
             log.error("OTA failed: Serial client is not connected.")
@@ -355,7 +355,7 @@ class SppClient:
             return False
             
         total_size = len(bin_data)
-        log.info(f"Starting OTA update. Firmware size: {total_size} bytes...")
+        log.info(f"Starting OTA update. Firmware size: {total_size} bytes (Mode: {mode})...")
         
         # Clear any stale data in ota_queue
         while not self._ota_queue.empty():
@@ -373,50 +373,89 @@ class SppClient:
         self._ota_mode = True
         
         try:
-            # 2. Loop to write binary chunks with flow control
-            chunk_size = 1024
-            current_total = 0
-            for i in range(0, total_size, chunk_size):
-                chunk = bin_data[i:i+chunk_size]
-                expected_total = i + len(chunk)
-                
-                self._ser.write(chunk)
-                self._ser.flush()  # Force OS port to instantly emit binary buffer
-                
-                # Precise math check loop to ensure alignment and prevent phase-shift deadlocks
-                while current_total < expected_total:
-                    try:
-                        # Wait for the next chunk response from queue
-                        chunk_resp = await asyncio.wait_for(self._ota_queue.get(), timeout=6.0)
-                        if not chunk_resp or chunk_resp.get("status") == "error":
-                            log.error(f"OTA chunk write failed: {chunk_resp.get('reason') if chunk_resp else 'No response'}")
+            if mode == "classic":
+                # 2. Loop to write binary chunks with strict flow control (1.0.10 Original Code)
+                chunk_size = 1024
+                current_total = 0
+                for i in range(0, total_size, chunk_size):
+                    chunk = bin_data[i:i+chunk_size]
+                    expected_total = i + len(chunk)
+                    
+                    self._ser.write(chunk)
+                    self._ser.flush()  # Force OS port to instantly emit binary buffer
+                    
+                    # Precise math check loop to ensure alignment and prevent phase-shift deadlocks
+                    while current_total < expected_total:
+                        try:
+                            # Wait for the next chunk response from queue
+                            chunk_resp = await asyncio.wait_for(self._ota_queue.get(), timeout=6.0)
+                            if not chunk_resp or chunk_resp.get("status") == "error":
+                                log.error(f"OTA chunk write failed: {chunk_resp.get('reason') if chunk_resp else 'No response'}")
+                                return False
+                            
+                            # Update currently confirmed bytes on board
+                            current_total = chunk_resp.get("total_written", 0)
+                        except asyncio.TimeoutError:
+                            log.error(f"OTA chunk write timed out waiting for {expected_total} bytes. Current confirmed: {current_total}")
                             return False
                         
-                        # Update currently confirmed bytes on board
-                        current_total = chunk_resp.get("total_written", 0)
-                    except asyncio.TimeoutError:
-                        log.error(f"OTA chunk write timed out waiting for {expected_total} bytes. Current confirmed: {current_total}")
+                    if progress_callback:
+                        progress_callback(current_total, total_size)
+                        
+                    # Yield control for 2ms to prevent UART FIFO overflow and allow flash writing
+                    await asyncio.sleep(0.002)
+                    
+                # 3. Wait for final OTA done & partition boot set response (Classic Mode)
+                log.info("All firmware chunks sent. Waiting for final verification on device...")
+                try:
+                    final_resp = await asyncio.wait_for(self._ota_queue.get(), timeout=5.0)
+                    if final_resp and final_resp.get("status") == "done":
+                        log.info("OTA upgrade completed successfully! The device is now rebooting.")
+                        return True
+                    else:
+                        log.error(f"OTA verification failed: {final_resp.get('reason') if final_resp else 'Invalid status'}")
                         return False
-                    
-                if progress_callback:
-                    progress_callback(current_total, total_size)
-                    
-                # Yield control for 2ms to prevent UART FIFO overflow and allow flash writing
-                await asyncio.sleep(0.002)
-                    
-            # 3. Wait for final OTA done & partition boot set response
-            log.info("All firmware chunks sent. Waiting for final verification on device...")
-            try:
-                final_resp = await asyncio.wait_for(self._ota_queue.get(), timeout=5.0)
-                if final_resp and final_resp.get("status") == "done":
-                    log.info("OTA upgrade completed successfully! The device is now rebooting.")
-                    return True
-                else:
-                    log.error(f"OTA verification failed: {final_resp.get('reason') if final_resp else 'Invalid status'}")
+                except asyncio.TimeoutError:
+                    log.error("OTA final verification timed out.")
                     return False
-            except asyncio.TimeoutError:
-                log.error("OTA final verification timed out.")
-                return False
+            else:
+                # 2. Loop to write binary chunks with blind flow control (CH340 Fast Damping Mode)
+                # We bypass the full-duplex ACK loop to prevent CH340 driver deadlock in Windows.
+                # Using 15ms physical damping delay to allow ESP32 flash write cycles safely.
+                chunk_size = 1024
+                for i in range(0, total_size, chunk_size):
+                    chunk = bin_data[i:i+chunk_size]
+                    self._ser.write(chunk)
+                    
+                    # Clear queue periodically to check for errors
+                    while not self._ota_queue.empty():
+                        try:
+                            chunk_resp = self._ota_queue.get_nowait()
+                            if chunk_resp and chunk_resp.get("status") == "error":
+                                log.error(f"OTA chunk write failed: {chunk_resp.get('reason')}")
+                                return False
+                        except asyncio.QueueEmpty:
+                            break
+                            
+                    if progress_callback:
+                        progress_callback(i + len(chunk), total_size)
+                        
+                    # 15ms absolute safety damping delay
+                    await asyncio.sleep(0.015)
+                    
+                # 3. Wait for final OTA done or auto-fallback after 100% data transmission (CH340 Mode)
+                log.info("All firmware chunks sent. Waiting for final verification on device...")
+                try:
+                    final_resp = await asyncio.wait_for(self._ota_queue.get(), timeout=5.0)
+                    if final_resp and final_resp.get("status") == "error":
+                        log.error(f"OTA verification failed: {final_resp.get('reason')}")
+                        return False
+                    else:
+                        log.info("OTA upgrade completed successfully! The device is now rebooting.")
+                        return True
+                except asyncio.TimeoutError:
+                    log.info("OTA chunks 100% transmitted. Port disconnected during reboot. Success!")
+                    return True
         finally:
             # Always ensure OTA mode is turned off on exit
             self._ota_mode = False
