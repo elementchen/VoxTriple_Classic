@@ -644,16 +644,23 @@ class VoxTripleApp:
 
     # ── Cloud update & OTA operations ─────────────────────────────
     async def _check_github_version(self):
-        url = "https://cdn.jsdelivr.net/gh/elementchen/VoxTriple_Classic@main/version.json"
+        url = "https://api.github.com/repos/elementchen/VoxTriple_Classic/releases/latest"
         headers = {"User-Agent": "VoxTriple-App"}
         req = urllib.request.Request(url, headers=headers, method="GET")
         try:
             loop = asyncio.get_event_loop()
-            response = await loop.run_in_executor(None, lambda: urllib.request.urlopen(req, timeout=2.0).read().decode())
+            response = await loop.run_in_executor(None, lambda: urllib.request.urlopen(req).read().decode())
             data = json.loads(response)
             
-            version_str = data.get("version", "")
-            bin_url = data.get("bin_url", "")
+            tag_name = data.get("tag_name", "")
+            version_str = tag_name.lstrip("v")
+            
+            bin_url = None
+            for asset in data.get("assets", []):
+                name = asset.get("name", "")
+                if name.startswith("esp32_bt_mic_v") and name.endswith(".bin") and "merged" not in name:
+                    bin_url = asset.get("browser_download_url")
+                    break
             
             if version_str and bin_url:
                 self._github_version = version_str
