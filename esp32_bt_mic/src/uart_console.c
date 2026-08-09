@@ -11,6 +11,9 @@
 #include "esp_vfs_dev.h"
 #include "config_cmd.h"
 #include "uart_console.h"
+#include "audio_capture.h"
+#include "esp_bt.h"
+#include "esp_bt_main.h"
 
 #define TAG "UART_CONSOLE"
 #define RX_BUF_SIZE     1024
@@ -196,6 +199,18 @@ esp_err_t uart_console_ota_start(size_t size)
         ESP_LOGE(TAG, "No OTA partition found!");
         return ESP_ERR_NOT_FOUND;
     }
+    
+    ESP_LOGW(TAG, "Suspending audio and Bluetooth services to prevent DMA/Interrupt conflicts during flash erase...");
+    
+    // 1. Deinit audio capture and disable I2S DMA interrupts to prevent cache error during flash writing
+    audio_capture_stop();
+    audio_capture_deinit();
+    
+    // 2. Disable Bluetooth RF to prevent radio interrupts and NVS flash contention
+    esp_bluedroid_disable();
+    esp_bluedroid_deinit();
+    esp_bt_controller_disable();
+    esp_bt_controller_deinit();
     
     // Clear underlying hardware RX RingBuffer immediately to purge any console bytes
     uart_flush_input(0);
