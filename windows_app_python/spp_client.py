@@ -449,6 +449,9 @@ class SppClient:
                     # Yield control for 18ms to prevent UART hardware RingBuffer overflow
                     await asyncio.sleep(0.018)
                     
+                # Allow 0.5s drain delay for trailing bytes to physical UART transmission
+                await asyncio.sleep(0.5)
+                
                 # 3. Wait for final OTA done & partition boot set response (Classic Mode)
                 log.info("All firmware chunks sent. Waiting for final verification on device...")
                 try:
