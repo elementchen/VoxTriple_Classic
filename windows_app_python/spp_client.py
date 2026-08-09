@@ -424,7 +424,10 @@ class SppClient:
                 # 2. Loop to write binary chunks with strict flow control (Classic Sync Mode)
                 # Optimized to synchronize every 16KB to prevent full-duplex driver lockups,
                 # while strictly validating progress to prevent false success.
-                chunk_size = 1024
+                # Using 256 bytes chunks to drastically shorten single packet physical transmission time (22ms at 115200).
+                # This eliminates the risk of UART FIFO overrun during concurrent Flash Block Erase cycles,
+                # as no data flows on the wire while the ESP32 is busy performing internal flash writes.
+                chunk_size = 256
                 current_total = 0
                 for i in range(0, total_size, chunk_size):
                     chunk = bin_data[i:i+chunk_size]
@@ -470,7 +473,7 @@ class SppClient:
                             
                     # 3. Synchronize strictly every 4KB (Flash Sector alignment) to prevent Windows serial driver lockup
                     # while ensuring absolute safety against buffer overrun.
-                    if i > 0 and i % (1024 * 4) == 0:
+                    if i > 0 and i % 4096 == 0:
                         try:
                             while current_total < i:
                                 chunk_resp = await asyncio.wait_for(self._ota_queue.get(), timeout=10.0)
@@ -489,8 +492,8 @@ class SppClient:
                     if progress_callback:
                         progress_callback(max(current_total, expected_total), total_size)
                         
-                    # Yield control for 30ms (Power Recovery Delay) to completely stabilize voltage ripples and allow flash writes
-                    await asyncio.sleep(0.030)
+                    # Yield control for 12ms to completely stabilize voltage ripples and allow CPU to clear UART FIFO
+                    await asyncio.sleep(0.012)
                 
                 # 3. Wait for final OTA done & partition boot set response (Classic Mode)
                 log.info("All firmware chunks sent. Waiting for final verification on device...")
