@@ -474,10 +474,10 @@ class SppClient:
                         except asyncio.QueueEmpty:
                             break
                             
-                    # 3. Synchronize strictly every 4KB (Flash Sector alignment) to prevent Windows serial driver lockup
+                    # 3. Synchronize strictly every 16KB to prevent Windows serial driver lockup
                     # while ensuring absolute safety against buffer overrun.
                     # We synchronize up to the nearest 1KB multiple to match ESP32's 1KB ACK boundaries.
-                    if i > 0 and i % 4096 == 0:
+                    if i > 0 and i % (1024 * 16) == 0:
                         target_sync = (i // 1024) * 1024
                         try:
                             while current_total < target_sync:
@@ -497,8 +497,9 @@ class SppClient:
                     if progress_callback:
                         progress_callback(max(current_total, expected_total), total_size)
                         
-                    # Yield control for 12ms to completely stabilize voltage ripples and allow CPU to clear UART FIFO
-                    await asyncio.sleep(0.012)
+                    # Yield control for 5ms to allow host UART driver and power ripple stabilization.
+                    # Since chunk_size is 256 bytes, 5ms is extremely safe and boosts speed significantly.
+                    await asyncio.sleep(0.005)
                 
                 # 3. Wait for final OTA done & partition boot set response (Classic Mode)
                 log.info("All firmware chunks sent. Waiting for final verification on device...")
