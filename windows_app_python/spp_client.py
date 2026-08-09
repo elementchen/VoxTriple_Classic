@@ -380,7 +380,7 @@ class SppClient:
         # Enable OTA mode to route responses into ota_queue
         self._ota_mode = True
         try:
-            # 2. High-speed smooth binary streaming (2KB chunks for realtime UI progress updates)
+            # 2. High-speed smooth binary streaming (2KB chunks, yield every 4 blocks to prevent Windows timer penalties)
             chunk_size = 2048
             for i in range(0, total_size, chunk_size):
                 chunk = bin_data[i:i+chunk_size]
@@ -394,7 +394,9 @@ class SppClient:
                 if progress_callback:
                     progress_callback(written, total_size)
                     
-                await asyncio.sleep(0.001)
+                # Windows Sleep resolution is 15.6ms. Yielding every 8KB (4 blocks) maximizes speed.
+                if i % (chunk_size * 4) == 0:
+                    await asyncio.sleep(0.001)
                     
             # 3. Wait for final OTA done or auto-fallback after 100% data transmission
             log.info("All firmware chunks sent successfully. Finalizing device update...")
