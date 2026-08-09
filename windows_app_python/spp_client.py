@@ -452,15 +452,28 @@ class SppClient:
                 # 3. Wait for final OTA done & partition boot set response (Classic Mode)
                 log.info("All firmware chunks sent. Waiting for final verification on device...")
                 try:
-                    final_resp = await asyncio.wait_for(self._ota_queue.get(), timeout=5.0)
-                    if final_resp and final_resp.get("status") == "done":
-                        log.info("OTA upgrade completed successfully! The device is now rebooting.")
-                        return True
-                    else:
-                        log.error(f"OTA verification failed: {final_resp.get('reason') if final_resp else 'Invalid status'}")
-                        return False
+                    while True:
+                        final_resp = await asyncio.wait_for(self._ota_queue.get(), timeout=8.0)
+                        if not final_resp:
+                            log.error("Invalid empty response from device.")
+                            return False
+                        
+                        status = final_resp.get("status")
+                        if status == "done":
+                            log.info("OTA upgrade completed successfully! The device is now rebooting.")
+                            return True
+                        elif status == "error":
+                            log.error(f"OTA verification failed: {final_resp.get('reason')}")
+                            return False
+                        elif status in ("progress", "next"):
+                            # This is just a trailing chunk progress confirmation, keep waiting for the final validation done signal!
+                            log.info(f"Received confirmation progress: {final_resp.get('total_written')}/{total_size}")
+                            continue
+                        else:
+                            log.error(f"Unknown status received: {status}")
+                            return False
                 except asyncio.TimeoutError:
-                    log.error("OTA final verification timed out.")
+                    log.error("OTA final verification timed out waiting for success confirmation.")
                     return False
             else:
                 # 2. Loop to write binary chunks with blind flow control (CH340 Fast Damping Mode)
