@@ -373,7 +373,7 @@ class SppClient:
             
             # Remember current port to reconnect
             port = self._ser.port
-            self.disconnect()
+            await self.disconnect()
             
             # Wait 3.0s for device to reboot and initialize serial console
             await asyncio.sleep(3.0)
@@ -420,6 +420,9 @@ class SppClient:
                                 if chunk_resp.get("status") == "error":
                                     log.error(f"OTA chunk write failed: {chunk_resp.get('reason')}")
                                     return False
+                                if chunk_resp.get("status") == "done":
+                                    log.info("OTA upgrade completed successfully! The device is now rebooting.")
+                                    return True
                                 current_total = max(current_total, chunk_resp.get("total_written", 0))
                         except asyncio.QueueEmpty:
                             break
@@ -432,6 +435,9 @@ class SppClient:
                                 if chunk_resp.get("status") == "error":
                                     log.error(f"OTA chunk write failed: {chunk_resp.get('reason')}")
                                     return False
+                                if chunk_resp.get("status") == "done":
+                                    log.info("OTA upgrade completed successfully! The device is now rebooting.")
+                                    return True
                                 current_total = max(current_total, chunk_resp.get("total_written", 0))
                         except asyncio.TimeoutError:
                             log.error(f"OTA handshake timeout at {expected_total} bytes. Connection lost.")
@@ -440,8 +446,8 @@ class SppClient:
                     if progress_callback:
                         progress_callback(max(current_total, expected_total), total_size)
                         
-                    # Yield control for 3ms to prevent UART FIFO overflow and allow flash writing
-                    await asyncio.sleep(0.003)
+                    # Yield control for 18ms to prevent UART hardware RingBuffer overflow
+                    await asyncio.sleep(0.018)
                     
                 # 3. Wait for final OTA done & partition boot set response (Classic Mode)
                 log.info("All firmware chunks sent. Waiting for final verification on device...")
