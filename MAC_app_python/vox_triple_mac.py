@@ -616,12 +616,12 @@ class VoxTripleApp:
 
     # ── Cloud update & OTA operations ─────────────────────────────
     async def _check_github_version(self):
-        url = "https://raw.githubusercontent.com/elementchen/VoxTriple_Classic/main/version.json"
+        url = "https://cdn.jsdelivr.net/gh/elementchen/VoxTriple_Classic@main/version.json"
         headers = {"User-Agent": "VoxTriple-App"}
         req = urllib.request.Request(url, headers=headers, method="GET")
         try:
             loop = asyncio.get_event_loop()
-            response = await loop.run_in_executor(None, lambda: urllib.request.urlopen(req).read().decode())
+            response = await loop.run_in_executor(None, lambda: urllib.request.urlopen(req, timeout=2.0).read().decode())
             data = json.loads(response)
             
             version_str = data.get("version", "")
