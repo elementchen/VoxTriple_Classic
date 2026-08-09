@@ -409,6 +409,26 @@ class SppClient:
                     chunk = bin_data[i:i+chunk_size]
                     expected_total = i + len(chunk)
                     
+                    # Pre-emit synchronization check for the fractional tail chunk to prevent UART FIFO overrun
+                    is_last_chunk = (i + chunk_size >= total_size)
+                    if is_last_chunk and i > 0:
+                        log.info(f"Syncing previous blocks with board before sending trailing chunk (current confirmed: {current_total}/{i})...")
+                        try:
+                            while current_total < i:
+                                chunk_resp = await asyncio.wait_for(self._ota_queue.get(), timeout=8.0)
+                                if chunk_resp:
+                                    if chunk_resp.get("status") == "error":
+                                        log.error(f"OTA pre-sync failed: {chunk_resp.get('reason')}")
+                                        return False
+                                    if chunk_resp.get("status") == "done":
+                                        log.info("OTA upgrade completed successfully! The device is now rebooting.")
+                                        return True
+                                    current_total = max(current_total, chunk_resp.get("total_written", 0))
+                        except asyncio.TimeoutError:
+                            log.error(f"Timeout waiting for sync before tail chunk. Confirmed: {current_total}/{i}")
+                            return False
+                        log.info("Sync complete. Emitting trailing fractional chunk...")
+                    
                     self._ser.write(chunk)
                     self._ser.flush()  # Force OS port to instantly emit binary buffer
                     
