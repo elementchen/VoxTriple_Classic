@@ -262,3 +262,31 @@ esp_err_t config_storage_clear_all(void)
     ESP_LOGI(TAG, "Config storage cleared successfully.");
     return ret;
 }
+
+esp_err_t config_storage_save_ota_ready(uint8_t ready)
+{
+    nvs_handle_t nvs_handle;
+    esp_err_t ret = nvs_open(NVS_NAMESPACE, NVS_READWRITE, &nvs_handle);
+    if (ret != ESP_OK) return ret;
+
+    ret = nvs_set_u8(nvs_handle, NVS_KEY_OTA_READY, ready);
+    if (ret == ESP_OK) nvs_commit(nvs_handle);
+    nvs_close(nvs_handle);
+    if (ret == ESP_OK) {
+        ESP_LOGI(TAG, "OTA Ready flag saved: %d", ready);
+    }
+    return ret;
+}
+
+esp_err_t config_storage_load_ota_ready(uint8_t *ready)
+{
+    if (!ready) return ESP_ERR_INVALID_ARG;
+
+    nvs_handle_t nvs_handle;
+    esp_err_t ret = nvs_open(NVS_NAMESPACE, NVS_READONLY, &nvs_handle);
+    if (ret != ESP_OK) return ret;
+
+    ret = nvs_get_u8(nvs_handle, NVS_KEY_OTA_READY, ready);
+    nvs_close(nvs_handle);
+    return ret;
+}

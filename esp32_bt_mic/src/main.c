@@ -54,6 +54,34 @@ void app_main(void)
     ESP_LOGI(TAG, "Step 2: Loading configuration...");
     config_storage_init();
 
+    /* Check if we need to enter clean OTA mode */
+    uint8_t ota_ready = 0;
+    if (config_storage_load_ota_ready(&ota_ready) == ESP_OK && ota_ready == 1) {
+        ESP_LOGW(TAG, "=========================================================");
+        ESP_LOGW(TAG, "   DETECTED OTA READY FLAG! ENTERING PURE OTA MODE        ");
+        ESP_LOGW(TAG, "   SKIPPING ALL BT, AUDIO, & GPIO INITIALIZATIONS        ");
+        ESP_LOGW(TAG, "=========================================================");
+        
+        // 1. Initialize only Wired UART Console for firmware reception
+        ESP_ERROR_CHECK(uart_console_init());
+        
+        // 2. Light up board LED (GPIO 16) to show visual OTA indication
+        gpio_config_t led_io = {
+            .pin_bit_mask = (1ULL << GPIO_NUM_16),
+            .mode = GPIO_MODE_OUTPUT,
+            .pull_up_en = GPIO_PULLUP_DISABLE,
+            .pull_down_en = GPIO_PULLDOWN_DISABLE,
+            .intr_type = GPIO_INTR_DISABLE,
+        };
+        gpio_config(&led_io);
+        gpio_set_level(GPIO_NUM_16, 0); // ON (Active Low)
+        
+        // 3. Keep main task idle while UART receives firmware
+        while (1) {
+            vTaskDelay(pdMS_TO_TICKS(1000));
+        }
+    }
+
     /* Dump NVS bt_config namespace */
     ESP_LOGI(TAG, "Dumping all NVS entries:");
     nvs_iterator_t it = NULL;

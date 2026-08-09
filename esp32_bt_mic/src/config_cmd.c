@@ -103,14 +103,29 @@ void execute_config_cmd(const char *cmd_line, size_t len, cmd_respond_cb_t respo
             cJSON *size_item = cJSON_GetObjectItem(root, "size");
             if (size_item && cJSON_IsNumber(size_item)) {
                 size_t ota_size = size_item->valueint;
-                esp_err_t err = uart_console_ota_start(ota_size);
-                if (err == ESP_OK) {
-                    const char *resp = "{\"status\":\"ok\"}\n";
-                    respond_cb(resp, strlen(resp));
+                uint8_t ota_ready = 0;
+                config_storage_load_ota_ready(&ota_ready);
+                
+                if (ota_ready == 1) {
+                    // Already in pure OTA mode, start flash write immediately without rebooting
+                    esp_err_t err = uart_console_ota_start(ota_size);
+                    if (err == ESP_OK) {
+                        const char *resp = "{\"status\":\"ok\"}\n";
+                        respond_cb(resp, strlen(resp));
+                    } else {
+                        char resp[128];
+                        snprintf(resp, sizeof(resp), "{\"status\":\"error\",\"reason\":\"ota_begin_failed: %d\"}\n", err);
+                        respond_cb(resp, strlen(resp));
+                    }
                 } else {
-                    char resp[128];
-                    snprintf(resp, sizeof(resp), "{\"status\":\"error\",\"reason\":\"ota_begin_failed: %d\"}\n", err);
+                    // Normal mode: write flag to NVS, respond OK, and reboot into clean mode!
+                    config_storage_save_ota_ready(1);
+                    const char *resp = "{\"status\":\"ok\",\"reboot\":1}\n";
                     respond_cb(resp, strlen(resp));
+                    
+                    ESP_LOGW("CONFIG_CMD", "OTA start requested. Rebooting into clean OTA mode in 500ms...");
+                    vTaskDelay(pdMS_TO_TICKS(500));
+                    esp_restart();
                 }
             }
         }

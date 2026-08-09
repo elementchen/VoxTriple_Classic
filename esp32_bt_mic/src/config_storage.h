@@ -23,6 +23,7 @@
 #define NVS_KEY_SLEEP_MODE "sleep_mode"
 #define NVS_KEY_MIC_ENABLED "mic_enabled"
 #define NVS_KEY_TX_POWER   "tx_power"
+#define NVS_KEY_OTA_READY   "ota_ready"
 
 /**
  * @brief Initialize NVS configuration storage
@@ -105,5 +106,8 @@ esp_err_t config_storage_load_mic_enabled(uint8_t *enabled);
  * @brief Clear all keys in NVS namespace
  */
 esp_err_t config_storage_clear_all(void);
+
+esp_err_t config_storage_save_ota_ready(uint8_t ready);
+esp_err_t config_storage_load_ota_ready(uint8_t *ready);
 
 #endif /* __CONFIG_STORAGE_H__ */

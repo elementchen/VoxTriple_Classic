@@ -14,6 +14,7 @@
 #include "audio_capture.h"
 #include "esp_bt.h"
 #include "esp_bt_main.h"
+#include "config_storage.h"
 
 #define TAG "UART_CONSOLE"
 #define RX_BUF_SIZE     1024
@@ -91,6 +92,9 @@ static void handle_ota_binary_data(const uint8_t *data, size_t len)
         s_rx_mode = UART_RX_MODE_JSON;
         esp_ota_end(s_ota_handle);
         
+        // Clear NVS ota_ready flag so it boots normally on next power cycle
+        config_storage_save_ota_ready(0);
+        
         char resp[128];
         snprintf(resp, sizeof(resp), "{\"status\":\"error\",\"reason\":\"write_failed: %s\"}\n", esp_err_to_name(err));
         write(1, resp, strlen(resp));
@@ -131,6 +135,9 @@ static void handle_ota_binary_data(const uint8_t *data, size_t len)
             write(1, err_resp, strlen(err_resp));
             return;
         }
+        
+        // Clear NVS ota_ready flag so it boots normally next time
+        config_storage_save_ota_ready(0);
         
         s_rx_mode = UART_RX_MODE_JSON;
         const char *done_resp = "{\"status\":\"done\"}\n";

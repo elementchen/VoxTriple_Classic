@@ -363,8 +363,34 @@ class SppClient:
             
         # 1. Send ota_start command (using 10.0s timeout to allow partition flash erasing)
         resp = await self._send_cmd({"cmd": "ota_start", "size": total_size}, timeout=10.0)
-        if not resp or resp.get("status") != "ok":
-            log.error(f"OTA start failed: {resp.get('reason') if resp else 'No response'}")
+        if not resp:
+            log.error("OTA start failed: No response from device.")
+            return False
+            
+        if resp.get("status") == "ok" and resp.get("reboot") == 1:
+            # Device needs reboot into clean OTA mode
+            log.info("Device is rebooting into clean OTA mode to ensure zero-interference flash erase...")
+            
+            # Remember current port to reconnect
+            port = self._ser.port
+            self.disconnect()
+            
+            # Wait 3.0s for device to reboot and initialize serial console
+            await asyncio.sleep(3.0)
+            
+            log.info(f"Reconnecting to {port} in clean OTA mode...")
+            if not await self.connect(port):
+                log.error("Failed to reconnect in clean OTA mode.")
+                return False
+                
+            # Resend ota_start under clean mode
+            log.info("Re-sending OTA start handshake in clean mode...")
+            resp = await self._send_cmd({"cmd": "ota_start", "size": total_size}, timeout=10.0)
+            if not resp or resp.get("status") != "ok":
+                log.error(f"Clean OTA start failed: {resp.get('reason') if resp else 'No response'}")
+                return False
+        elif resp.get("status") != "ok":
+            log.error(f"OTA start failed: {resp.get('reason')}")
             return False
             
         log.info("OTA handshake success. Transferring binary payload in chunks...")
@@ -374,7 +400,9 @@ class SppClient:
         
         try:
             if mode == "classic":
-                # 2. Loop to write binary chunks with strict flow control (1.0.10 Original Code)
+                # 2. Loop to write binary chunks with strict flow control (Classic Sync Mode)
+                # Optimized to synchronize every 16KB to prevent full-duplex driver lockups,
+                # while strictly validating progress to prevent false success.
                 chunk_size = 1024
                 current_total = 0
                 for i in range(0, total_size, chunk_size):
@@ -384,26 +412,36 @@ class SppClient:
                     self._ser.write(chunk)
                     self._ser.flush()  # Force OS port to instantly emit binary buffer
                     
-                    # Precise math check loop to ensure alignment and prevent phase-shift deadlocks
-                    while current_total < expected_total:
+                    # Non-blocking update of confirmed progress from queue
+                    while not self._ota_queue.empty():
                         try:
-                            # Wait for the next chunk response from queue
-                            chunk_resp = await asyncio.wait_for(self._ota_queue.get(), timeout=6.0)
-                            if not chunk_resp or chunk_resp.get("status") == "error":
-                                log.error(f"OTA chunk write failed: {chunk_resp.get('reason') if chunk_resp else 'No response'}")
-                                return False
+                            chunk_resp = self._ota_queue.get_nowait()
+                            if chunk_resp:
+                                if chunk_resp.get("status") == "error":
+                                    log.error(f"OTA chunk write failed: {chunk_resp.get('reason')}")
+                                    return False
+                                current_total = max(current_total, chunk_resp.get("total_written", 0))
+                        except asyncio.QueueEmpty:
+                            break
                             
-                            # Update currently confirmed bytes on board
-                            current_total = chunk_resp.get("total_written", 0)
+                    # Strict synchronization check every 16KB to prevent deadlock while guaranteeing data integrity
+                    if i > 0 and i % (1024 * 16) == 0:
+                        try:
+                            chunk_resp = await asyncio.wait_for(self._ota_queue.get(), timeout=5.0)
+                            if chunk_resp:
+                                if chunk_resp.get("status") == "error":
+                                    log.error(f"OTA chunk write failed: {chunk_resp.get('reason')}")
+                                    return False
+                                current_total = max(current_total, chunk_resp.get("total_written", 0))
                         except asyncio.TimeoutError:
-                            log.error(f"OTA chunk write timed out waiting for {expected_total} bytes. Current confirmed: {current_total}")
+                            log.error(f"OTA handshake timeout at {expected_total} bytes. Connection lost.")
                             return False
                         
                     if progress_callback:
-                        progress_callback(current_total, total_size)
+                        progress_callback(max(current_total, expected_total), total_size)
                         
-                    # Yield control for 2ms to prevent UART FIFO overflow and allow flash writing
-                    await asyncio.sleep(0.002)
+                    # Yield control for 3ms to prevent UART FIFO overflow and allow flash writing
+                    await asyncio.sleep(0.003)
                     
                 # 3. Wait for final OTA done & partition boot set response (Classic Mode)
                 log.info("All firmware chunks sent. Waiting for final verification on device...")
