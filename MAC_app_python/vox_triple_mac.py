@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """VoxTriple — ESP32 BT Microphone Config (macOS)
 
 Shares spp_client.py, config_service.py with the Windows version.
@@ -6,7 +7,7 @@ Keyboard I/O is Mac-specific (keyboard_io_mac.py).
 Wired config and OTA firmware flashing are handled via physical USB Serial.
 Requires Accessibility permission in System Settings for keyboard capture.
 """
-import sys, os, asyncio, logging, tkinter as tk
+import sys, os, asyncio, logging, json, urllib.request, tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 
 # Import shared modules from sibling windows_app_python directory
@@ -64,8 +65,8 @@ class VoxTripleApp:
     def __init__(self, root: tk.Tk):
         self.root = root
         self.root.title("VoxTriple Config Client macOS (v1.0.10)")
-        self.root.geometry("640x700")
-        self.root.minsize(600, 640)
+        self.root.geometry("830x700")
+        self.root.minsize(780, 640)
 
         # Connect via SPP Client (re-uses physical USB Serial /dev/cu.* under macOS)
         self.spp = spp_client.SppClient()
@@ -320,7 +321,19 @@ class VoxTripleApp:
         ttk.Label(key_row, text="Key:", width=5, font=("Helvetica", 9, "bold")).pack(side="left")
         ttk.Label(key_row, textvariable=b["display"], width=13, relief="sunken", background="#f0f0f0").pack(side="left", padx=4)
         
-        btn = ttk.Button(key_row, text="Capture / 捕获", command=lambda idx=i: self._begin_capture(idx), takefocus=False)
+        btn = tk.Button(
+            key_row,
+            text="Capture / 捕获",
+            command=lambda idx=i: self._begin_capture(idx),
+            takefocus=False,
+            background="#E1E1E1",
+            foreground="black",
+            highlightbackground="#E1E1E1",
+            relief="flat",
+            bd=0,
+            padx=10,
+            pady=4
+        )
         btn.pack(side="left", padx=4)
         self._cap_btns[i] = btn
 
@@ -349,7 +362,11 @@ class VoxTripleApp:
     def _begin_capture(self, idx: int):
         for i, b in enumerate(self._btn):
             b["capturing"] = (i == idx)
-        self._cap_btns[idx].configure(text="Capturing... / 捕获中...")
+            if i != idx:
+                self._cap_btns[i].configure(highlightbackground="#E1E1E1")
+                
+        # Only change highlightbackground (border) to blue, keep text black and background gray
+        self._cap_btns[idx].configure(highlightbackground="#007AFF")
         self._status_text.set(f"Capturing key for Button {idx+1}… Press a key.")
 
         def on_key(vk: int, _ext, _sc):
@@ -357,7 +374,8 @@ class VoxTripleApp:
                 self._btn[idx]["vk"].set(vk)
                 self._update_display(idx)
             self._status_text.set("Key captured.")
-            self._cap_btns[idx].configure(text="Capture / 捕获")
+            # Restore border color
+            self._cap_btns[idx].configure(highlightbackground="#E1E1E1")
             keyboard_io.stop_key_capture()
 
         keyboard_io.start_key_capture(on_key, self.root)
@@ -652,33 +670,62 @@ class VoxTripleApp:
         self._ota_status_text.set("Initializing smart update...")
         _run_async(self._do_smart_update())
 
-    async def _do_smart_update(self):
-        cache_dir = "cache"
-        os.makedirs(cache_dir, exist_ok=True)
-        filename = f"esp32_bt_mic_v{self._github_version}.bin"
-        save_path = os.path.join(cache_dir, filename)
-        
-        # Check cache
-        if os.path.exists(save_path):
-            self.root.after(0, lambda: self._ota_status_text.set("Found cached bin. Flashing..."))
+    def _get_cache_dir(self) -> str:
+        if sys.platform == "darwin":
+            path = os.path.expanduser("~/Library/Caches/com.voxtriple.config")
         else:
-            # Download from GitHub
-            self.root.after(0, lambda: self._ota_status_text.set("Downloading latest firmware..."))
-            try:
-                await self._download_firmware(self._github_bin_url, save_path)
-            except Exception as e:
-                log.error(f"Download failed: {e}")
-                self.root.after(0, lambda: messagebox.showerror(
-                    "Error / 错误", 
-                    f"Failed to download firmware from GitHub:\n{e}\n\n下载最新固件失败，请检查网络！"
-                ))
-                self.root.after(0, lambda: self._ota_status_text.set("Download failed."))
-                self.root.after(0, lambda: self._set_ui_state(tk.NORMAL))
-                return
-                
-        # Trigger OTA flash
-        self.root.after(0, lambda: self._ota_status_text.set("Flashing downloaded firmware..."))
-        await self._do_ota(save_path)
+            path = "cache"
+        os.makedirs(path, exist_ok=True)
+        return path
+
+    async def _do_smart_update(self):
+        try:
+            cache_dir = self._get_cache_dir()
+            filename = f"esp32_bt_mic_v{self._github_version}.bin"
+            save_path = os.path.join(cache_dir, filename)
+        except Exception as e:
+            log.error(f"Cache dir initialization failed: {e}")
+            self.root.after(0, lambda: messagebox.showerror(
+                "Error / 错误", 
+                f"Failed to initialize cache directory:\n{e}\n\n初始化缓存写入权限失败，请检查目录权限！"
+            ))
+            self.root.after(0, lambda: self._ota_status_text.set("Init failed."))
+            self.root.after(0, lambda: self._set_ui_state(tk.NORMAL))
+            return
+            
+        try:
+            # Check cache validity (must exist and be at least 500KB to be considered valid)
+            if os.path.exists(save_path) and os.path.getsize(save_path) > 500000:
+                self.root.after(0, lambda: self._ota_status_text.set("Found cached bin. Flashing..."))
+            else:
+                # If cache is invalid or broken, remove it and force re-download
+                if os.path.exists(save_path):
+                    try:
+                        os.remove(save_path)
+                    except Exception as ex:
+                        log.warning(f"Failed to clean invalid cache file: {ex}")
+                        
+                # Download from GitHub
+                self.root.after(0, lambda: self._ota_status_text.set("Downloading latest firmware..."))
+                try:
+                    await self._download_firmware(self._github_bin_url, save_path)
+                except Exception as e:
+                    log.error(f"Download failed: {e}")
+                    self.root.after(0, lambda: messagebox.showerror(
+                        "Error / 错误", 
+                        f"Failed to download firmware from GitHub:\n{e}\n\n下载最新固件失败，请检查网络！"
+                    ))
+                    self.root.after(0, lambda: self._ota_status_text.set("Download failed."))
+                    self.root.after(0, lambda: self._set_ui_state(tk.NORMAL))
+                    return
+                    
+            # Trigger OTA flash
+            self.root.after(0, lambda: self._ota_status_text.set("Flashing downloaded firmware..."))
+            await self._do_ota(save_path)
+        except Exception as e:
+            log.error(f"Smart update main flow failed: {e}")
+            self.root.after(0, lambda: self._ota_status_text.set("Update process error."))
+            self.root.after(0, lambda: self._set_ui_state(tk.NORMAL))
 
     async def _download_firmware(self, download_url, save_path):
         loop = asyncio.get_event_loop()

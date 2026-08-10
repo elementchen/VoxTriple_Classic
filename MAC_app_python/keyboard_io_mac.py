@@ -1,51 +1,41 @@
-"""Mac keyboard capture and simulation via pynput.
+"""Mac keyboard capture and simulation.
 
-Capture: pynput.keyboard.Listener with on_press callback.
-On macOS this requires Accessibility permission (System Settings →
-Privacy & Security → Accessibility).
-
-Simulation: pynput.keyboard.Controller via Quartz/CGEvent.
-Windows VK codes from ESP32 are translated to Mac key events.
+Capture: tkinter <KeyPress> event binding (no system permissions needed).
+Simulation: pynput.keyboard.Controller via Quartz/CGEventPost.
 """
+from __future__ import annotations
 import logging
-from pynput import keyboard
-from pynput.keyboard import Key, KeyCode
 
 log = logging.getLogger(__name__)
 
-# ── Simulation: Windows VK → pynput Key ───────────────────────────
+# ── Simulation: pynput key controller ─────────────────────────────
+from pynput import keyboard as _pynput
+from pynput.keyboard import Key, KeyCode
+
 _controller = None
 
 def get_controller():
     global _controller
     if _controller is None:
         try:
-            _controller = keyboard.Controller()
+            _controller = _pynput.Controller()
         except Exception as e:
             log.error(f"Failed to initialize pynput keyboard Controller: {e}")
     return _controller
 
-# Modifier VK → Mac modifier keys
-_MOD_VK_TO_KEY = {
-    0xA2: Key.ctrl_l,   # VK_LCtrl
-    0xA3: Key.ctrl_r,   # VK_RCtrl
-    0xA0: Key.shift_l,  # VK_LShift
-    0xA1: Key.shift_r,  # VK_RShift
-    0xA4: Key.alt_l,    # VK_LAlt   → Option (left)
-    0xA5: Key.alt_r,    # VK_RAlt   → Option (right)
-    0x5B: Key.cmd_l,    # VK_LWin   → Command (left)
-    0x5C: Key.cmd_r,    # VK_RWin   → Command (right)
-}
 
-# Standard VK → pynput Key (non-printable special keys)
+def _key(name: str):
+    return getattr(Key, name, None)
+
+
 _VK_TO_KEY = {
     0x08: Key.backspace, 0x09: Key.tab,      0x0D: Key.enter,
     0x1B: Key.esc,       0x20: Key.space,    0x2E: Key.delete,
     0x21: Key.page_up,   0x22: Key.page_down, 0x23: Key.end,
     0x24: Key.home,      0x25: Key.left,     0x26: Key.up,
-    0x27: Key.right,     0x28: Key.down,     0x2D: Key.insert,
-    0x2C: Key.print_screen, 0x13: Key.pause,
-    0x14: Key.caps_lock, 0x90: Key.num_lock,
+    0x27: Key.right,     0x28: Key.down,     0x2D: _key('insert'),
+    0x2C: _key('print_screen'), 0x13: _key('pause'),
+    0x14: _key('caps_lock'), 0x90: _key('num_lock'),
     0x6A: KeyCode.from_char("*"), 0x6B: KeyCode.from_char("+"),
     0x6D: KeyCode.from_char("-"), 0x6E: KeyCode.from_char("."),
     0x6F: KeyCode.from_char("/"),
@@ -53,26 +43,22 @@ _VK_TO_KEY = {
     0x74: Key.f5,  0x75: Key.f6,  0x76: Key.f7,  0x77: Key.f8,
     0x78: Key.f9,  0x79: Key.f10, 0x7A: Key.f11, 0x7B: Key.f12,
 }
+_VK_TO_KEY = {k: v for k, v in _VK_TO_KEY.items() if v is not None}
 
 
 def _vk_to_key(vk: int):
-    """Convert Windows VK code to pynput Key/KeyCode."""
-    # Check special key table first
     if vk in _VK_TO_KEY:
         return _VK_TO_KEY[vk]
-    # Printable ASCII characters (0x30-0x5A, etc.)
     if 0x20 <= vk <= 0x7E:
         return KeyCode.from_char(chr(vk))
     return None
 
 
 def key_down(vk: int, modifier: int = 0):
-    """Press key + modifiers on macOS."""
     ctrl = get_controller()
     if not ctrl:
         return
     try:
-        # Press modifiers first (order: ctrl, shift, alt, cmd)
         if modifier & 0x01: ctrl.press(Key.ctrl_l)
         if modifier & 0x02: ctrl.press(Key.shift_l)
         if modifier & 0x04: ctrl.press(Key.alt_l)
@@ -89,7 +75,6 @@ def key_down(vk: int, modifier: int = 0):
 
 
 def key_up(vk: int, modifier: int = 0):
-    """Release key + modifiers on macOS."""
     ctrl = get_controller()
     if not ctrl:
         return
@@ -107,107 +92,6 @@ def key_up(vk: int, modifier: int = 0):
         if modifier & 0x01: ctrl.release(Key.ctrl_l)
     except Exception as e:
         log.error(f"key_up error: {e}")
-
-
-# ── Capture: pynput Key → Windows VK ──────────────────────────────
-_listener: keyboard.Listener | None = None
-_capture_callback = None
-
-
-# Reverse mapping: pynput Key → VK (for capture / key learning)
-_KEY_TO_VK = {
-    Key.backspace: 0x08, Key.tab: 0x09,       Key.enter: 0x0D,
-    Key.esc: 0x1B,       Key.space: 0x20,     Key.delete: 0x2E,
-    Key.page_up: 0x21,   Key.page_down: 0x22, Key.end: 0x23,
-    Key.home: 0x24,      Key.left: 0x25,      Key.up: 0x26,
-    Key.right: 0x27,     Key.down: 0x28,      Key.insert: 0x2D,
-    Key.print_screen: 0x2C, Key.pause: 0x13,
-    Key.caps_lock: 0x14, Key.num_lock: 0x90,
-    Key.ctrl_l: 0xA2,    Key.ctrl_r: 0xA3,
-    Key.shift_l: 0xA0,   Key.shift_r: 0xA1,
-    Key.alt_l: 0xA4,     Key.alt_r: 0xA5,
-    Key.cmd_l: 0x5B,     Key.cmd_r: 0x5C,
-    Key.f1: 0x70,  Key.f2: 0x71,  Key.f3: 0x72,  Key.f4: 0x73,
-    Key.f5: 0x74,  Key.f6: 0x75,  Key.f7: 0x76,  Key.f8: 0x77,
-    Key.f9: 0x78,  Key.f10: 0x79, Key.f11: 0x7A, Key.f12: 0x7B,
-}
-
-# Additional Mac-specific key → VK
-_KEY_TO_VK[Key.media_volume_mute] = 0xAD
-_KEY_TO_VK[Key.media_volume_down] = 0xAE
-_KEY_TO_VK[Key.media_volume_up] = 0xAF
-_KEY_TO_VK[Key.media_play_pause] = 0xB3
-_KEY_TO_VK[Key.media_next] = 0xB0
-_KEY_TO_VK[Key.media_previous] = 0xB1
-
-
-def _key_to_vk(key) -> int | None:
-    """Convert pynput Key/KeyCode to Windows VK code."""
-    if isinstance(key, Key):
-        return _KEY_TO_VK.get(key)
-    if isinstance(key, KeyCode):
-        # Try .vk attribute first (may be None on macOS)
-        if key.vk is not None:
-            return key.vk
-        # Try character mapping
-        if key.char and len(key.char) == 1:
-            return ord(key.char.upper())
-    return None
-
-
-def start_key_capture(callback, tk_root=None):
-    """Start keyboard listener for capture mode.
-    `callback(vk, is_extended, scan_code)` — is_extended and scan_code
-    are always 0 on macOS (not applicable)."""
-    global _listener, _capture_callback
-    _capture_callback = callback
-
-    def on_press(key):
-        try:
-            # Ignore modifier-only presses during capture
-            if isinstance(key, Key) and key in (
-                Key.ctrl, Key.ctrl_l, Key.ctrl_r, Key.shift, Key.shift_l,
-                Key.shift_r, Key.alt, Key.alt_l, Key.alt_r, Key.cmd,
-                Key.cmd_l, Key.cmd_r
-            ):
-                return True
-        except Exception:
-            pass
-
-        vk = _key_to_vk(key)
-        cb = _capture_callback
-        if vk and cb:
-            if tk_root:
-                tk_root.after(0, lambda v=vk: cb(v, False, 0))
-            else:
-                cb(vk, False, 0)
-        # Stop listener after first captured key
-        return False
-
-    _listener = keyboard.Listener(on_press=on_press)
-    _listener.start()
-    log.info("Keyboard listener started (macOS)")
-
-
-def stop_key_capture():
-    global _listener, _capture_callback
-    _capture_callback = None
-    if _listener:
-        _listener.stop()
-        _listener = None
-    log.info("Keyboard listener stopped")
-
-
-# ── Modifier mapping (same as Windows version) ────────────────────
-def map_modifier_vk(vk: int, is_extended: bool) -> int:
-    """Map generic modifier VK to specific left/right VK."""
-    if vk == 0x11:  # Ctrl
-        return 0xA3 if is_extended else 0xA2  # VK_RCtrl : VK_LCtrl
-    if vk == 0x10:  # Shift
-        return 0xA1 if is_extended else 0xA0  # VK_RShift : VK_LShift
-    if vk == 0x12:  # Alt
-        return 0xA5 if is_extended else 0xA4  # VK_RAlt : VK_LAlt
-    return vk
 
 
 # ── Key name map (shared with Windows version) ────────────────────
@@ -245,7 +129,96 @@ _MOD_NAMES = [
 
 
 def build_display(vk: int, modifier: int) -> str:
-    """Build display string like 'LCtrl+Tab'."""
     parts = [name for mask, name in _MOD_NAMES if modifier & mask]
     parts.append(vk_name(vk))
     return "+".join(parts)
+
+
+# ── Capture: tkinter event binding (no system permissions) ─────────
+# Simple and reliable: bind <KeyPress> on the root window, capture
+# the next key, then unbind.  Works in any tkinter app.
+
+_tk_bind_id = None
+_tk_root = None
+_tk_callback = None
+
+# tkinter keysym → Windows VK for non-printable special keys
+_KEYSYM_TO_VK = {
+    "BackSpace": 0x08, "Tab": 0x09, "Return": 0x0D, "Escape": 0x1B,
+    "space": 0x20, "Delete": 0x2E,
+    "Page_Up": 0x21, "Page_Down": 0x22, "End": 0x23, "Home": 0x24,
+    "Left": 0x25, "Up": 0x26, "Right": 0x27, "Down": 0x28,
+    "Insert": 0x2D, "Pause": 0x13, "Print": 0x2C,
+    "Caps_Lock": 0x14, "Num_Lock": 0x90, "Scroll_Lock": 0x91,
+    "Shift_L": 0xA0, "Shift_R": 0xA1,
+    "Control_L": 0xA2, "Control_R": 0xA3,
+    "Alt_L": 0xA4, "Alt_R": 0xA5,
+    "Meta_L": 0x5B, "Meta_R": 0x5C,
+    "Menu": 0x5D,
+    "KP_Enter": 0x0D, "KP_Multiply": 0x6A, "KP_Add": 0x6B,
+    "KP_Subtract": 0x6D, "KP_Decimal": 0x6E, "KP_Divide": 0x6F,
+    "F1": 0x70, "F2": 0x71, "F3": 0x72, "F4": 0x73,
+    "F5": 0x74, "F6": 0x75, "F7": 0x76, "F8": 0x77,
+    "F9": 0x78, "F10": 0x79, "F11": 0x7A, "F12": 0x7B,
+}
+
+
+def _tk_event_to_vk(event) -> int | None:
+    """Convert a tkinter <KeyPress> event to Windows VK code."""
+    if event.keysym in _KEYSYM_TO_VK:
+        return _KEYSYM_TO_VK[event.keysym]
+    if event.char and len(event.char) == 1:
+        c = event.char.upper()
+        if 0x20 <= ord(c) <= 0x7E:
+            return ord(c)
+    return None
+
+
+def _on_tk_keypress(event):
+    cb = _tk_callback
+    if cb is None:
+        return
+    vk = _tk_event_to_vk(event)
+    if vk:
+        cb(vk, 0, 0)
+    stop_key_capture()
+
+
+def start_key_capture(callback, tk_root=None):
+    """Bind <KeyPress> to capture the next key press.
+
+    `callback(vk, is_extended, scan_code)` — is_extended and scan_code
+    are always 0 on macOS (not applicable).
+
+    Does NOT require Accessibility permission. Returns True always.
+    """
+    global _tk_bind_id, _tk_callback, _tk_root
+    _tk_callback = callback
+    _tk_root = tk_root
+    if tk_root:
+        _tk_bind_id = tk_root.bind("<KeyPress>", _on_tk_keypress, add="+")
+    log.info("Key capture started (tkinter bind)")
+    return True
+
+
+def stop_key_capture():
+    global _tk_bind_id, _tk_callback, _tk_root
+    _tk_callback = None
+    if _tk_root and _tk_bind_id:
+        try:
+            _tk_root.unbind("<KeyPress>", _tk_bind_id)
+        except Exception:
+            pass
+        _tk_bind_id = None
+        _tk_root = None
+    log.info("Key capture stopped")
+
+
+def map_modifier_vk(vk: int, is_extended: bool) -> int:
+    if vk == 0x11:
+        return 0xA3 if is_extended else 0xA2
+    if vk == 0x10:
+        return 0xA1 if is_extended else 0xA0
+    if vk == 0x12:
+        return 0xA5 if is_extended else 0xA4
+    return vk
