@@ -271,13 +271,8 @@ class VoxTripleApp:
         ota_frame = ttk.LabelFrame(tab_ota, text="Firmware OTA Upgrade / 固件 OTA 升级", padding=12)
         ota_frame.pack(fill="both", expand=True, padx=4, pady=4)
         
-        # Line 0: Update Mode Selection
-        ota_mode_row = ttk.Frame(ota_frame)
-        ota_mode_row.pack(fill="x", pady=4)
-        ttk.Label(ota_mode_row, text="Update Mode / 升级模式:", font=("Helvetica", 9, "bold")).pack(side="left", padx=4)
+        # Default to classic synchronization mode for 100% reliable OTA updates
         self._ota_mode_var = tk.StringVar(value="classic")
-        ttk.Radiobutton(ota_mode_row, text="Classic Sync / 经典稳健模式 (MicroUSB/CP2102)", variable=self._ota_mode_var, value="classic").pack(side="left", padx=8)
-        ttk.Radiobutton(ota_mode_row, text="CH340 Fast / 极速容错模式 (Type-C)", variable=self._ota_mode_var, value="ch340").pack(side="left", padx=8)
         
         # Line 1: Select local File (.bin)
         ota_file_row = ttk.Frame(ota_frame)
