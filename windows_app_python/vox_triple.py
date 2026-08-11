@@ -775,12 +775,31 @@ class VoxTripleApp:
         self.root.destroy()
 
 
+def get_resource_path(relative_path):
+    """ Get absolute path to resource, works for dev and for PyInstaller """
+    try:
+        # PyInstaller creates a temp folder and stores path in _MEIPASS
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.abspath(".")
+    return os.path.join(base_path, relative_path)
+
+
 def main():
     # Start asyncio event loop in background thread
     t = threading.Thread(target=start_asyncio_loop, daemon=True)
     t.start()
 
     root = tk.Tk()
+    
+    # Set window icon (for top-left corner and taskbar)
+    ico_path = get_resource_path("VoxTriple.ico")
+    if os.path.exists(ico_path):
+        try:
+            root.iconbitmap(ico_path)
+        except Exception as e:
+            print(f"Failed to set window icon: {e}")
+            
     VoxTripleApp(root)
     root.mainloop()
 
