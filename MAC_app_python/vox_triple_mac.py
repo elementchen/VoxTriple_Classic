@@ -64,7 +64,7 @@ def _build_modifier(vars: dict) -> int:
 class VoxTripleApp:
     def __init__(self, root: tk.Tk):
         self.root = root
-        self.root.title("VoxTriple Config Client macOS (v1.0.10)")
+        self.root.title("VoxTriple Config Client macOS (v1.0.13)")
         self.root.geometry("830x700")
         self.root.minsize(780, 640)
 

@@ -112,7 +112,7 @@ coll = COLLECT(
 app = BUNDLE(
     coll,
     name='VoxTriple.app',
-    icon=None,
+    icon='VoxTriple.icns',
     bundle_identifier='com.voxtriple.config',
     version='1.7.0',
     info_plist={
