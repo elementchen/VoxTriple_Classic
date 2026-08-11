@@ -115,6 +115,10 @@ _KEY_NAMES = {
     0x78: "F9", 0x79: "F10", 0x7A: "F11", 0x7B: "F12",
     0xA0: "LShift", 0xA1: "RShift", 0xA2: "LCtrl",
     0xA3: "RCtrl", 0xA4: "LOption", 0xA5: "ROption",
+    # Punctuation / OEM Keys
+    0xBA: ";", 0xBC: ",", 0xBE: ".", 0xBF: "/",
+    0xBD: "-", 0xBB: "=", 0xDB: "[", 0xDD: "]",
+    0xDC: "\\", 0xDE: "'", 0xC0: "`",
 }
 
 
@@ -160,6 +164,14 @@ _KEYSYM_TO_VK = {
     "F1": 0x70, "F2": 0x71, "F3": 0x72, "F4": 0x73,
     "F5": 0x74, "F6": 0x75, "F7": 0x76, "F8": 0x77,
     "F9": 0x78, "F10": 0x79, "F11": 0x7A, "F12": 0x7B,
+    # Punctuation / OEM Keys (Normal keysyms)
+    "semicolon": 0xBA, "comma": 0xBC, "period": 0xBE, "slash": 0xBF,
+    "minus": 0xBD, "equal": 0xBB, "bracketleft": 0xDB, "bracketright": 0xDD,
+    "backslash": 0xDC, "apostrophe": 0xDE, "grave": 0xC0,
+    # Shifted punctuation keysyms (map to the base physical key)
+    "colon": 0xBA, "less": 0xBC, "greater": 0xBE, "question": 0xBF,
+    "underscore": 0xBD, "plus": 0xBB, "braceleft": 0xDB, "braceright": 0xDD,
+    "bar": 0xDC, "quotedbl": 0xDE, "asciitilde": 0xC0,
 }
 
 
