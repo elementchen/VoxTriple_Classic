@@ -1,5 +1,5 @@
 /* ==========================================================================
-   Figma 1:1 Pixel-Perfect Light Theme Styles for VoxTriple (KeyMapper)
+   Figma 1:1 Pixel-Perfect Light Theme Styles (Frameless Window Update)
    ========================================================================== */
 
 :root {
@@ -50,63 +50,121 @@ body {
     gap: 16px;
 }
 
-/* ── 头部与连接栏 ───────────────────────────────────────────────────────── */
-.app-header {
+/* ── 1. 自定义无边框窗口标题栏 (可拖拽) ─────────────────────────────────── */
+.custom-titlebar {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    gap: 16px;
-    height: 68px;
+    height: 48px;
+    width: 100%;
+    background: transparent;
+    -webkit-app-region: drag; /* 允许整个标题栏拖动窗口 */
+    padding: 0 4px;
 }
 
-/* Logo 卡片 */
 .logo-card {
-    background: var(--bg-card);
-    border-radius: var(--border-radius-lg);
-    padding: 10px 18px;
     display: flex;
     align-items: center;
-    gap: 12px;
-    height: 100%;
-    box-shadow: var(--shadow-soft);
-    border: 1px solid rgba(0, 0, 0, 0.01);
+    gap: 10px;
+    -webkit-app-region: no-drag;
 }
 
 .logo-img {
-    width: 44px;
-    height: 44px;
-    border-radius: 10px;
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
     object-fit: contain;
 }
 
-.logo-text {
-    display: flex;
-    flex-direction: column;
-}
-
 .logo-title {
-    font-size: 16px;
-    font-weight: 700;
-    color: #000;
+    font-size: 15px;
+    font-weight: 750;
+    color: #121212;
     letter-spacing: -0.3px;
 }
 
 .logo-version {
-    font-size: 11px;
+    font-size: 10px;
     color: var(--text-inactive);
-    font-weight: 500;
-    margin-top: 1px;
+    font-weight: 600;
+    background-color: #e8e8ec;
+    padding: 2px 6px;
+    border-radius: 4px;
+    margin-left: 6px;
 }
 
-/* 连接控制条 */
-.control-panel {
+/* 标题栏居中：最近按键监测反馈 */
+.titlebar-center {
     flex-grow: 1;
-    background: var(--bg-card);
-    border-radius: var(--border-radius-lg);
-    padding: 0 16px 0 20px;
+    display: flex;
+    justify-content: center;
+    -webkit-app-region: no-drag;
+}
+
+.live-monitor {
+    background-color: var(--bg-card);
+    border-radius: 20px;
+    padding: 6px 16px;
     display: flex;
     align-items: center;
-    height: 100%;
+    gap: 10px;
+    box-shadow: var(--shadow-soft);
+    border: 1px solid rgba(0, 0, 0, 0.01);
+}
+
+.monitor-label {
+    font-size: 9px;
+    font-weight: 800;
+    color: var(--text-inactive);
+    letter-spacing: 0.8px;
+}
+
+.monitor-value {
+    font-size: 12px;
+    font-weight: 800;
+    color: var(--accent-orange);
+    letter-spacing: 0.5px;
+    background: var(--accent-orange-bg);
+    padding: 2px 8px;
+    border-radius: 10px;
+    min-width: 60px;
+    text-align: center;
+}
+
+/* 标题栏最右：关闭 App 按钮 */
+.btn-close-app {
+    width: 28px;
+    height: 28px;
+    border: none;
+    border-radius: 50%;
+    background: var(--bg-card);
+    color: var(--text-inactive);
+    font-size: 18px;
+    font-weight: 400;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+    box-shadow: var(--shadow-soft);
+    -webkit-app-region: no-drag; /* 按钮禁用拖拽 */
+}
+
+.btn-close-app:hover {
+    color: #ff3b30;
+    background-color: #ff3b3020;
+    transform: scale(1.05);
+}
+
+/* ── 2. 设备连接控制横栏 (第二行) ──────────────────────────────────────── */
+.device-connection-bar {
+    background: var(--bg-card);
+    border-radius: var(--border-radius-lg);
+    padding: 0 20px;
+    display: flex;
+    align-items: center;
+    height: 56px;
+    width: 100%;
     box-shadow: var(--shadow-soft);
     border: 1px solid rgba(0, 0, 0, 0.01);
 }
@@ -141,7 +199,7 @@ body {
 
 .divider {
     width: 1px;
-    height: 28px;
+    height: 24px;
     background-color: var(--border-color);
     margin: 0 16px;
 }
@@ -168,7 +226,7 @@ select {
     background: #f4f4f6;
     border: none;
     border-radius: var(--border-radius-md);
-    padding: 7px 32px 7px 12px;
+    padding: 6px 30px 6px 12px;
     font-size: 12px;
     font-weight: 600;
     color: var(--text-primary);
@@ -185,12 +243,32 @@ select:hover {
 .select-wrapper::after {
     content: "";
     position: absolute;
-    right: 12px;
+    right: 10px;
     top: 50%;
     transform: translateY(-50%);
     border: 4px solid transparent;
     border-top-color: #555;
     pointer-events: none;
+}
+
+/* 新增：串口刷新按钮 */
+.btn-refresh {
+    background: #f4f4f6;
+    border: none;
+    border-radius: 50%;
+    width: 26px;
+    height: 26px;
+    color: #555;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.25s ease;
+}
+
+.btn-refresh:hover {
+    background: #eaeaec;
+    transform: rotate(180deg);
 }
 
 .btn {
@@ -201,7 +279,7 @@ select:hover {
     cursor: pointer;
     outline: none;
     transition: all 0.15s ease;
-    height: 34px;
+    height: 32px;
     padding: 0 16px;
     display: flex;
     align-items: center;
@@ -212,7 +290,7 @@ select:hover {
     background-color: var(--accent-black);
     color: #fff;
     margin-left: 12px;
-    border-radius: 17px; /* Figma Rounded button styling */
+    border-radius: 16px;
     padding: 0 20px;
 }
 
@@ -229,7 +307,7 @@ select:hover {
     display: flex;
     flex-direction: column;
     align-items: flex-start;
-    gap: 2px;
+    gap: 1px;
 }
 
 .firmware-version {
@@ -245,13 +323,14 @@ select:hover {
     font-weight: 700;
     font-size: 10px;
     letter-spacing: 0.5px;
+    height: 32px;
 }
 
 .btn-update-check:hover {
     background-color: var(--btn-gray-hover);
 }
 
-/* ── 核心功能布局 ───────────────────────────────────────────────────────── */
+/* ── 3. 主排版 ─────────────────────────────────────────────────────────── */
 .main-layout {
     display: flex;
     flex-direction: column;
@@ -271,7 +350,7 @@ select:hover {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 16px;
+    margin-bottom: 12px;
 }
 
 .section-title {
@@ -288,7 +367,7 @@ select:hover {
     letter-spacing: 0.5px;
 }
 
-/* ── 按键网格 ───────────────────────────────────────────────────────────── */
+/* ── 按键网格 & 卡片 ────────────────────────────────────────────────────── */
 .key-grid {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
@@ -303,7 +382,7 @@ select:hover {
     transition: all 0.2s ease;
     display: flex;
     flex-direction: column;
-    height: 220px;
+    height: 210px;
 }
 
 .key-card:hover {
@@ -315,6 +394,17 @@ select:hover {
     border-color: var(--accent-orange);
     box-shadow: 0 0 12px rgba(255, 107, 0, 0.1);
     background: #fffcfb;
+}
+
+/* 物理按键敲击时弹跳闪烁动画 */
+@keyframes pulse-physical {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.04); border-color: var(--accent-orange); box-shadow: 0 0 16px rgba(255, 107, 0, 0.15); background: #fffcfb; }
+    100% { transform: scale(1); }
+}
+
+.key-card.physical-pressed {
+    animation: pulse-physical 0.25s ease-out;
 }
 
 .key-card-header {
@@ -356,7 +446,7 @@ select:hover {
     display: flex;
     justify-content: center;
     align-items: center;
-    font-size: 30px;
+    font-size: 28px;
     font-weight: 700;
     color: var(--text-primary);
     letter-spacing: -0.5px;
@@ -408,7 +498,7 @@ select:hover {
     display: grid;
     grid-template-columns: 320px 1fr;
     gap: 16px;
-    height: 310px;
+    height: 270px;
 }
 
 /* 左半：硬件级设置控制面板 */
@@ -421,7 +511,7 @@ select:hover {
 .setting-card {
     background: var(--bg-card);
     border-radius: var(--border-radius-lg);
-    padding: 20px;
+    padding: 16px 20px;
     box-shadow: var(--shadow-soft);
     border: 1px solid rgba(0, 0, 0, 0.01);
 }
@@ -430,7 +520,7 @@ select:hover {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    height: 76px;
+    height: 70px;
 }
 
 .setting-icon-desc {
@@ -466,6 +556,7 @@ select:hover {
     display: flex;
     flex-direction: column;
     justify-content: space-between;
+    height: 184px;
 }
 
 .power-section-header {
@@ -473,21 +564,19 @@ select:hover {
     font-weight: 800;
     color: var(--text-inactive);
     letter-spacing: 1.2px;
-    margin-bottom: 8px;
+    margin-bottom: 6px;
 }
 
 .power-row {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-top: 4px;
 }
 
 .power-row-tx {
     display: flex;
     flex-direction: column;
-    gap: 10px;
-    margin-top: 10px;
+    gap: 8px;
 }
 
 .tx-text-header {
@@ -509,7 +598,6 @@ select:hover {
     grid-template-columns: repeat(8, 1fr);
     gap: 5px;
     height: 8px;
-    margin-top: 4px;
 }
 
 .power-segment {
@@ -595,14 +683,13 @@ input:checked + .switch-slider:before {
     font-size: 11px;
     font-weight: 700;
     color: var(--text-primary);
-    margin-top: 4px;
 }
 
 .upload-dropzone {
     border: 1.5px dashed #d1d1d6;
     background: #fafafb;
     border-radius: var(--border-radius-md);
-    padding: 20px;
+    padding: 16px;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -610,8 +697,7 @@ input:checked + .switch-slider:before {
     gap: 6px;
     cursor: pointer;
     transition: all 0.2s ease;
-    height: 100px;
-    margin-top: 6px;
+    height: 94px;
 }
 
 .upload-dropzone:hover {
@@ -646,7 +732,7 @@ input:checked + .switch-slider:before {
 }
 
 .ota-progress-section {
-    margin-top: 8px;
+    margin-top: 4px;
 }
 
 .progress-texts {
@@ -688,9 +774,12 @@ input:checked + .switch-slider:before {
     color: var(--text-inactive);
     border-radius: var(--border-radius-md);
     font-weight: 700;
-    height: 40px;
-    margin-top: 8px;
+    height: 38px;
     letter-spacing: 0.5px;
+    border: none;
+    outline: none;
+    cursor: pointer;
+    transition: all 0.15s ease;
 }
 
 .btn-flash:not([disabled]) {

@@ -414,3 +414,56 @@ function onOtaProgress(written, total) {
     document.getElementById("progress-fill").style.width = `${pct}%`;
     document.getElementById("progress-pct").textContent = `${pct}%`;
 }
+
+// ── 自定义关闭窗口 ───────────────────────────────────────────────────────
+function closeAppWindow() {
+    if (window.pywebview && window.pywebview.api) {
+        window.pywebview.api.close_window();
+    }
+}
+
+// ── 物理按键点击高亮闪烁交互与监控 ──────────────────────────────────────────
+function onPhysicalButtonEvent(btnId, state) {
+    const card = document.getElementById(`key-card-${btnId}`);
+    if (!card) return;
+    
+    if (state === 1) {
+        // 卡片弹跳闪烁
+        card.classList.add("physical-pressed");
+        setTimeout(() => {
+            card.classList.remove("physical-pressed");
+        }, 250);
+        
+        // 更新顶部按键监视文本
+        const vk = currentConfigs[btnId].vk;
+        const keyName = getFriendlyKeyName(vk);
+        const mod = currentConfigs[btnId].mod;
+        
+        const parts = [];
+        const modNames = [
+            { mask: 0x01, name: "Ctrl" }, { mask: 0x02, name: "Shift" }, 
+            { mask: 0x04, name: "Alt" }, { mask: 0x08, name: "Cmd" },
+            { mask: 0x10, name: "Ctrl" }, { mask: 0x20, name: "Shift" }, 
+            { mask: 0x40, name: "Alt" }, { mask: 0x80, name: "Cmd" }
+        ];
+        
+        // 提取已选中的修饰键并排重
+        const seenMods = new Set();
+        modNames.forEach(m => {
+            if ((mod & m.mask) > 0) {
+                seenMods.add(m.name);
+            }
+        });
+        seenMods.forEach(name => parts.push(name));
+        parts.push(keyName);
+        
+        const monitorVal = document.getElementById("monitor-val");
+        monitorVal.textContent = parts.join("+");
+        
+        // 播放最近按键小震颤高亮动效
+        monitorVal.style.transform = "scale(1.1)";
+        setTimeout(() => {
+            monitorVal.style.transform = "scale(1)";
+        }, 150);
+    }
+}

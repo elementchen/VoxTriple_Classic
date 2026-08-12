@@ -163,9 +163,17 @@ class Api:
             if self._window:
                 self._window.show_dialog("Error", "Failed to fetch updates from GitHub.\n获取 GitHub 在线更新版本失败，请检查网络！")
 
+    def close_window(self):
+        """Close App window, triggered by JS close button."""
+        log.info("Close Window request received from Webview.")
+        if self._window:
+            self._window.destroy()
+
     # ── Callbacks ─────────────────────────────────────────────────────────
     def _on_button_event(self, btn_id: int, state: int):
-        log.debug(f"Button trigger: {btn_id} state={state}")
+        log.info(f"Button trigger: {btn_id} state={state}")
+        if self._window:
+            self._window.evaluate_js(f"onPhysicalButtonEvent({btn_id}, {state})")
 
     def _on_status(self, hfp: int, audio: int):
         log.debug(f"HFP={hfp} Audio={audio}")
@@ -203,15 +211,16 @@ def main():
 
     api = Api()
     
-    # Enable window stretching and provide proper content padding
+    # Enable window stretching and provide proper content padding (Frameless Edition)
     window = webview.create_window(
         title="VoxTriple Config Client macOS", 
         url=index_path, 
         js_api=api,
         width=860,
-        height=760,
-        min_size=(830, 730),
-        resizable=True
+        height=830,
+        min_size=(830, 800),
+        resizable=True,
+        frameless=True
     )
     api.set_window(window)
 
