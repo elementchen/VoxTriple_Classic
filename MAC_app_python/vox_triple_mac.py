@@ -299,10 +299,10 @@ def main():
         url=index_path, 
         js_api=api,
         width=860,
-        height=860,
-        min_size=(830, 840),
+        height=780,
+        min_size=(830, 750),
         resizable=True,
-        frameless=True
+        frameless=False
     )
     api.set_window(window)
 
