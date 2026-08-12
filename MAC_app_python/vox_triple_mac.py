@@ -299,8 +299,8 @@ def main():
         url=index_path, 
         js_api=api,
         width=860,
-        height=780,
-        min_size=(830, 750),
+        height=840,
+        min_size=(830, 800),
         resizable=True,
         frameless=False
     )
