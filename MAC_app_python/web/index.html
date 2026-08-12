@@ -50,10 +50,14 @@
             
             <div class="firmware-section">
                 <span class="control-label">FIRMWARE</span>
-                <span class="firmware-version" id="firmware-ver">v--</span>
+                <div class="firmware-status-wrapper">
+                    <span class="firmware-version" id="firmware-ver">v--</span>
+                    <span class="firmware-status-label" id="firmware-status-label"></span>
+                </div>
             </div>
             
-            <button class="btn btn-update-check" id="btn-check-update" onclick="checkAppUpdate()">CHECK UPDATE</button>
+            <!-- 仅在有固件更新时动态显示的智能升级按钮 -->
+            <button class="btn btn-update-trigger" id="btn-update-trigger" style="display: none;" title="Start Smart Firmware Upgrade">UPDATE</button>
         </div>
 
         <!-- 3. 键盘按键映射配置区域 -->

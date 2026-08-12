@@ -150,13 +150,11 @@ async function onConnectClick() {
         document.getElementById("status-text").textContent = "Disconnected";
         document.getElementById("firmware-ver").textContent = "v--";
         
-        // Reset check update button state
-        const btnUpdate = document.getElementById("btn-check-update");
-        btnUpdate.style.backgroundColor = "var(--btn-gray)";
-        btnUpdate.style.color = "#555";
-        btnUpdate.style.boxShadow = "none";
-        btnUpdate.textContent = "CHECK UPDATE";
-        btnUpdate.disabled = false;
+        // 条件隐藏升级按钮并重置状态小字
+        const btnUpdate = document.getElementById("btn-update-trigger");
+        if (btnUpdate) btnUpdate.style.display = "none";
+        const labelStatus = document.getElementById("firmware-status-label");
+        if (labelStatus) labelStatus.textContent = "";
         
         resetConfigUi();
     }
@@ -396,53 +394,38 @@ async function onFlashFirmware() {
     }
 }
 
-// ── Smart Cloud Check & Auto Update (Aligns with Old Stable version) ─────
+// ── Smart Cloud Check & Auto Update (100% 还原老稳定版本交互) ────────────
 async function postConnectUpdateCheck() {
     if (!window.pywebview || !window.pywebview.api) return;
     
-    const res = await window.pywebview.api.check_update();
-    const btnUpdate = document.getElementById("btn-check-update");
+    const labelStatus = document.getElementById("firmware-status-label");
+    const btnUpdate = document.getElementById("btn-update-trigger");
     
-    if (res && res.ok && res.has_new) {
-        // Upgrade button dynamic display (Aligns with Old logic)
-        btnUpdate.style.backgroundColor = "var(--accent-orange)";
-        btnUpdate.style.color = "#ffffff";
-        btnUpdate.style.boxShadow = "0 4px 12px rgba(255, 107, 0, 0.2)";
-        btnUpdate.textContent = `UPDATE TO v${res.latest}`;
-        btnUpdate.dataset.latest = res.latest;
-        
-        // Remove check update binding, replace with direct auto-upgrade
-        btnUpdate.onclick = triggerSmartUpdate;
-    } else {
-        btnUpdate.style.backgroundColor = "var(--btn-gray)";
-        btnUpdate.style.color = "var(--text-inactive)";
-        btnUpdate.style.boxShadow = "none";
-        btnUpdate.textContent = "UP TO DATE";
-        btnUpdate.onclick = null;
-    }
-}
-
-// Fallback for manual check update click (when not connected)
-async function checkAppUpdate() {
-    if (isConnected) return; // Handled automatically post connection
-    
-    if (!window.pywebview || !window.pywebview.api) return;
-    
-    const btn = document.getElementById("btn-check-update");
-    const origText = btn.textContent;
-    btn.textContent = "CHECKING...";
+    labelStatus.textContent = "(检测中...)";
+    labelStatus.style.color = "var(--text-muted)";
     
     const res = await window.pywebview.api.check_update();
-    btn.textContent = origText;
     
     if (res && res.ok) {
         if (res.has_new) {
-            alert(`发现新版本 v${res.latest}！\n请连接设备有线串口后直接执行一键升级。`);
+            // 有新版固件：显示小字提示并“动态出来” UPDATE 按钮
+            labelStatus.textContent = `(有新版 v${res.latest})`;
+            labelStatus.style.color = "var(--accent-orange)";
+            
+            btnUpdate.style.display = "flex";
+            btnUpdate.dataset.latest = res.latest;
+            btnUpdate.textContent = "UPDATE";
+            btnUpdate.onclick = triggerSmartUpdate;
         } else {
-            alert("您的固件已经是最新版本！");
+            // 已经是最新版：显示最新版小字，按钮保持隐藏
+            labelStatus.textContent = "(已经是最新版)";
+            labelStatus.style.color = "#2ed573";
+            btnUpdate.style.display = "none";
         }
     } else {
-        alert(res ? res.message : "检查固件更新失败，请检查网络！");
+        labelStatus.textContent = "(检测固件失败)";
+        labelStatus.style.color = "var(--text-inactive)";
+        btnUpdate.style.display = "none";
     }
 }
 
@@ -453,7 +436,7 @@ async function triggerSmartUpdate() {
         return;
     }
     
-    const btnUpdate = document.getElementById("btn-check-update");
+    const btnUpdate = document.getElementById("btn-update-trigger");
     btnUpdate.disabled = true;
     btnUpdate.textContent = "UPGRADING...";
     
@@ -466,40 +449,37 @@ async function triggerSmartUpdate() {
     if (!ok) {
         alert("启动在线升级失败，请检查网络或串口！");
         btnUpdate.disabled = false;
-        btnUpdate.textContent = `UPDATE TO v${btnUpdate.dataset.latest}`;
+        btnUpdate.textContent = "UPDATE";
     }
 }
 
 function onSmartUpdateComplete(success) {
-    const btnUpdate = document.getElementById("btn-check-update");
+    const btnUpdate = document.getElementById("btn-update-trigger");
     btnUpdate.disabled = false;
     
     const progressFill = document.getElementById("progress-fill");
     const progressPct = document.getElementById("progress-pct");
+    const labelStatus = document.getElementById("firmware-status-label");
     
     if (success) {
         progressFill.style.width = "100%";
         progressPct.textContent = "100% Completed";
         alert("固件在线升级成功！开发板正在重启生效。");
-        btnUpdate.textContent = "UP TO DATE";
-        btnUpdate.style.backgroundColor = "var(--btn-gray)";
-        btnUpdate.style.color = "var(--text-inactive)";
-        btnUpdate.style.boxShadow = "none";
-        btnUpdate.onclick = null;
+        btnUpdate.style.display = "none";
+        labelStatus.textContent = "(已经是最新版)";
+        labelStatus.style.color = "#2ed573";
     } else {
         alert("在线升级成功！开发板正在重启引导，请等待片刻后重新连接。");
-        btnUpdate.textContent = "UP TO DATE";
-        btnUpdate.style.backgroundColor = "var(--btn-gray)";
-        btnUpdate.style.color = "var(--text-inactive)";
-        btnUpdate.style.boxShadow = "none";
-        btnUpdate.onclick = null;
+        btnUpdate.style.display = "none";
+        labelStatus.textContent = "(已经是最新版)";
+        labelStatus.style.color = "#2ed573";
     }
 }
 
 function onSmartUpdateError(reason) {
-    const btnUpdate = document.getElementById("btn-check-update");
+    const btnUpdate = document.getElementById("btn-update-trigger");
     btnUpdate.disabled = false;
-    btnUpdate.textContent = `UPDATE TO v${btnUpdate.dataset.latest}`;
+    btnUpdate.textContent = "UPDATE";
     alert(`在线固件升级失败！\n原因: ${reason}`);
 }
 

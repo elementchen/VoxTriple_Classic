@@ -318,18 +318,37 @@ select:hover {
     color: var(--text-primary);
 }
 
-.btn-update-check {
-    background-color: var(--btn-gray);
-    color: #555;
-    margin-left: 12px;
-    font-weight: 700;
+.firmware-status-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.firmware-status-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+}
+
+.btn-update-trigger {
+    background-color: var(--accent-orange);
+    color: #ffffff;
+    box-shadow: 0 4px 12px rgba(255, 107, 0, 0.2);
+    border-radius: 16px;
+    padding: 0 16px;
+    font-weight: 800;
     font-size: 10px;
     letter-spacing: 0.5px;
     height: 32px;
+    margin-left: 12px;
+    display: none; /* 默认隐藏，有更新时动态显示 */
+    align-items: center;
+    justify-content: center;
 }
 
-.btn-update-check:hover {
-    background-color: var(--btn-gray-hover);
+.btn-update-trigger:hover {
+    opacity: 0.9;
+    transform: scale(0.98);
 }
 
 /* ── 3. 主排版 ─────────────────────────────────────────────────────────── */
