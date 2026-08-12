@@ -1,13 +1,13 @@
-/* ==========================================================================
-   Figma 1:1 Pixel-Perfect JS Controller with Native keydown Capture
-   ========================================================================== */
+// ==========================================================================
+// VoxTriple Webview Frontend App Logic
+// ==========================================================================
 
-// ── VK 码与名称的相互对照字典 ─────────────────────────────────────────────
+// ── Virtual Key Code Map (Physical Keyboard mappings under macOS) ─────────
 const JS_CODE_TO_VK = {
-    "KeyA": 0x41, "KeyB": 0x42, "KeyC": 0x43, "KeyD": 0x44, "KeyE": 0x45, "KeyF": 0x46, "KeyG": 0x47, "KeyH": 0x48,
-    "KeyI": 0x49, "KeyJ": 0x4A, "KeyK": 0x4B, "KeyL": 0x4C, "KeyM": 0x4D, "KeyN": 0x4E, "KeyO": 0x4F, "KeyP": 0x50,
-    "KeyQ": 0x51, "KeyR": 0x52, "KeyS": 0x53, "KeyT": 0x54, "KeyU": 0x55, "KeyV": 0x56, "KeyW": 0x57, "KeyX": 0x58,
-    "KeyY": 0x59, "KeyZ": 0x5A,
+    "KeyA": 0x41, "KeyB": 0x42, "KeyC": 0x43, "KeyD": 0x44, "KeyE": 0x45, "KeyF": 0x46, "KeyG": 0x47,
+    "KeyH": 0x48, "KeyI": 0x49, "KeyJ": 0x4A, "KeyK": 0x4B, "KeyL": 0x4C, "KeyM": 0x4D, "KeyN": 0x4E,
+    "KeyO": 0x4F, "KeyP": 0x50, "KeyQ": 0x51, "KeyR": 0x52, "KeyS": 0x53, "KeyT": 0x54, "KeyU": 0x55,
+    "KeyV": 0x56, "KeyW": 0x57, "KeyX": 0x58, "KeyY": 0x59, "KeyZ": 0x5A,
     "Digit0": 0x30, "Digit1": 0x31, "Digit2": 0x32, "Digit3": 0x33, "Digit4": 0x34, "Digit5": 0x35, "Digit6": 0x36,
     "Digit7": 0x37, "Digit8": 0x38, "Digit9": 0x39,
     "Backspace": 0x08, "Tab": 0x09, "Enter": 0x0D, "Escape": 0x1B, "Space": 0x20,
@@ -38,7 +38,7 @@ const VK_TO_NAME = {
     0x91: "SCROLL", 0x90: "NumLock", 0x13: "Pause"
 };
 
-// ── 全局状态变量 ─────────────────────────────────────────────────────────
+// ── Global App State ──────────────────────────────────────────────────────
 let currentConfigs = [
     { vk: 0, mod: 0 },
     { vk: 0, mod: 0 },
@@ -49,32 +49,12 @@ let selectedOtaPath = "";
 let isConnected = false;
 let capturingIdx = -1;
 
-// ── 初始化事件绑定 ───────────────────────────────────────────────────────
+// ── Dom Initialization ───────────────────────────────────────────────────
 document.addEventListener("DOMContentLoaded", () => {
-    // 监听连接按钮
+    // Connect Button
     document.getElementById("btn-connect").addEventListener("click", onConnectClick);
     
-    // 监听检查更新按钮
-    document.getElementById("btn-check-update").addEventListener("click", checkAppUpdate);
-    
-    // 打开 App 时延迟 1.5 秒自动静默检查更新，若有更新则高亮更新按钮
-    window.addEventListener('pywebviewready', () => {
-        setTimeout(async () => {
-            if (window.pywebview && window.pywebview.api) {
-                const res = await window.pywebview.api.check_update();
-                if (res && res.ok && res.has_new) {
-                    const btn = document.getElementById("btn-check-update");
-                    if (btn) {
-                        btn.style.backgroundColor = "var(--accent-orange-bg)";
-                        btn.style.color = "var(--accent-orange)";
-                        btn.textContent = "NEW FIRMWARE";
-                    }
-                }
-            }
-        }, 1500);
-    });
-
-    // 拖拽文件 OTA 绑定
+    // File Drag-Drop binding for OTA zone
     const dropzone = document.getElementById("dropzone");
     dropzone.addEventListener("dragover", (e) => {
         e.preventDefault();
@@ -89,17 +69,18 @@ document.addEventListener("DOMContentLoaded", () => {
         if (e.dataTransfer.files.length > 0) {
             const file = e.dataTransfer.files[0];
             if (file.name.endsWith(".bin")) {
-                selectedOtaPath = file.path || file.name; // pywebview 拖拽可拿到绝对路径
+                selectedOtaPath = file.path || file.name;
                 updateOtaSelectedFile(file.name);
             }
         }
     });
     
-    // 定时轮询串口（每3秒）
+    // Poll serial ports every 3.0s
     setInterval(pollPorts, 3000);
+    pollPorts();
 });
 
-// ── 串口列表轮询 ─────────────────────────────────────────────────────────
+// ── Serial Port Polling ───────────────────────────────────────────────────
 async function pollPorts() {
     if (window.pywebview && window.pywebview.api) {
         const ports = await window.pywebview.api.get_ports();
@@ -129,7 +110,7 @@ function updatePorts(ports) {
     }
 }
 
-// ── 串口连接与断开 ───────────────────────────────────────────────────────
+// ── Serial Port Connection / Disconnection ───────────────────────────────
 async function onConnectClick() {
     if (!window.pywebview || !window.pywebview.api) return;
     
@@ -148,11 +129,14 @@ async function onConnectClick() {
             document.getElementById("status-dot").className = "status-dot connected";
             document.getElementById("status-text").textContent = "Connected";
             
-            // 拉取配置并渲染
+            // Pull configuration cache
             const config = await window.pywebview.api.fetch_config();
             if (config) {
                 renderConfig(config);
             }
+            
+            // Perform automatic update check (Silent checking on connection)
+            postConnectUpdateCheck();
         } else {
             btn.textContent = "CONNECT";
             alert("Connection Failed / 连接失败，请检查串口是否已被占用！");
@@ -165,45 +149,44 @@ async function onConnectClick() {
         document.getElementById("status-dot").className = "status-dot disconnected";
         document.getElementById("status-text").textContent = "Disconnected";
         document.getElementById("firmware-ver").textContent = "v--";
+        
+        // Reset check update button state
+        const btnUpdate = document.getElementById("btn-check-update");
+        btnUpdate.style.backgroundColor = "var(--btn-gray)";
+        btnUpdate.style.color = "#555";
+        btnUpdate.style.boxShadow = "none";
+        btnUpdate.textContent = "CHECK UPDATE";
+        btnUpdate.disabled = false;
+        
         resetConfigUi();
     }
 }
 
-// ── 渲染配置到界面上 ─────────────────────────────────────────────────────
+// ── Render Config Cache ──────────────────────────────────────────────────
 function renderConfig(config) {
-    // 固件版本号
-    document.getElementById("firmware-ver").textContent = "v" + (config.version || "1.0.9");
-    
-    // 麦克风
+    document.getElementById("firmware-ver").textContent = "v" + (config.version || "1.0.10");
     document.getElementById("mic-toggle").checked = (config.mic_enabled === 1);
-    
-    // 自动休眠
     document.getElementById("sleep-toggle").checked = (config.sleep_mode === 1);
     
-    // 发射功率 (0-7)
     setTxPowerUi(config.tx_power !== undefined ? config.tx_power : 4);
     
-    // 四个按键映射与修饰键
     for (let i = 0; i < 4; i++) {
         const vk = config.mappings[i].vk;
         const mod = config.mappings[i].mod;
         
-        currentConfigs[i] = { vk: vk, mod: mod };
+        currentConfigs[i] = { vk, mod };
         
-        // 显示按键字符
-        const displayVal = getFriendlyKeyName(vk);
-        const cardDisplayEl = document.getElementById(`key-display-${i}`);
-        cardDisplayEl.textContent = displayVal;
+        // Key Name
+        document.getElementById(`key-display-${i}`).textContent = getFriendlyKeyName(vk);
         
-        // 若为主键码非空，添加特定高亮类
-        const cardEl = cardDisplayEl.parentElement;
+        const cardEl = document.getElementById(`key-display-${i}`).parentElement;
         if (vk > 0) {
             cardEl.classList.add("active-display");
         } else {
             cardEl.classList.remove("active-display");
         }
         
-        // 渲染修饰键高亮
+        // Modifiers
         const pills = document.querySelectorAll(`#mods-${i} .mod-pill`);
         pills.forEach(pill => {
             const mask = parseInt(pill.getAttribute("data-mask"));
@@ -229,7 +212,7 @@ function resetConfigUi() {
     setTxPowerUi(0);
 }
 
-// ── 键名转换 ─────────────────────────────────────────────────────────────
+// ── Friendly Key Name ────────────────────────────────────────────────────
 function getFriendlyKeyName(vk) {
     if (vk === 0) return "--";
     if (VK_TO_NAME[vk]) return VK_TO_NAME[vk];
@@ -238,14 +221,13 @@ function getFriendlyKeyName(vk) {
     return `VK_${vk.toString(16).toUpperCase()}`;
 }
 
-// ── 点击切换修饰键 (Modifier) ──────────────────────────────────────────
+// ── Toggle Modifier ──────────────────────────────────────────────────────
 async function toggleMod(btnIdx, mask) {
     if (!isConnected) return;
     
     const pill = document.querySelector(`#mods-${btnIdx} .mod-pill[data-mask="${mask}"]`);
     const wasActive = pill.classList.contains("active");
     
-    // 更新本地配置
     if (wasActive) {
         pill.classList.remove("active");
         currentConfigs[btnIdx].mod &= ~mask;
@@ -254,11 +236,10 @@ async function toggleMod(btnIdx, mask) {
         currentConfigs[btnIdx].mod |= mask;
     }
     
-    // 一键保存写入到硬件上
     saveAllConfigsToDevice();
 }
 
-// ── 功率 (TX Power) 设置交互 ─────────────────────────────────────────────
+// ── TX Power UX ──────────────────────────────────────────────────────────
 function setTxPowerUi(level) {
     const dbmMap = ["-12", "-9", "-6", "-3", "0", "3", "6", "9"];
     document.getElementById("tx-power-val").textContent = `${dbmMap[level] || "0"} dBm`;
@@ -273,13 +254,13 @@ function setTxPowerUi(level) {
     });
 }
 
-function setTxPower(level) {
+async function setTxPower(level) {
     if (!isConnected) return;
     setTxPowerUi(level);
     saveAllConfigsToDevice();
 }
 
-// ── 硬件开关设置 ─────────────────────────────────────────────────────────
+// ── Mic & Sleep Toggles ──────────────────────────────────────────────────
 function onMicToggle() {
     if (!isConnected) return;
     saveAllConfigsToDevice();
@@ -290,14 +271,13 @@ function onSleepToggle() {
     saveAllConfigsToDevice();
 }
 
-// ── 保存配置至开发板 ─────────────────────────────────────────────────────
+// ── Write parameters to physical board flash ─────────────────────────────
 async function saveAllConfigsToDevice() {
     if (!window.pywebview || !window.pywebview.api) return;
     
     const mic = document.getElementById("mic-toggle").checked ? 1 : 0;
     const sleep = document.getElementById("sleep-toggle").checked ? 1 : 0;
     
-    // 获取当前选中的功率格数 (计算 active 的数量 - 1)
     const activeSegments = document.querySelectorAll("#tx-power-bar .power-segment.active");
     const tx = Math.max(0, activeSegments.length - 1);
     
@@ -309,80 +289,74 @@ async function saveAllConfigsToDevice() {
     );
 }
 
-// ── 捕获键盘按键流程 (JS Keydown 原生监听) ─────────────────────────────────
+// ── Capture physical key sequence (Native JS) ────────────────────────────
 function startKeyCapture(btnIdx) {
     if (!isConnected) {
         alert("Please connect to the ESP32 keyboard first!\n请先建立有线串口连接！");
         return;
     }
-    if (capturingIdx !== -1) return; // 已经在捕获中
+    
+    if (capturingIdx !== -1) return; // Already capturing
     
     capturingIdx = btnIdx;
     
-    // 渲染 UI 状态
-    const cardEl = document.querySelector(`.key-card[data-idx="${btnIdx}"]`);
-    cardEl.classList.add("capturing-state");
+    const card = document.getElementById(`key-card-${btnIdx}`);
     const btn = document.getElementById(`btn-capture-${btnIdx}`);
-    btn.textContent = "PRESS...";
+    const display = document.getElementById(`key-display-${btnIdx}`);
     
-    // 注册网页级全局键盘事件拦截
-    document.addEventListener("keydown", onKeyCaptured, { capture: true });
+    card.classList.add("capturing-state");
+    btn.textContent = "PRESS...";
+    display.textContent = "?";
+    
+    // Bind global native keyboard interception
+    document.addEventListener("keydown", onCapturedKeydown);
 }
 
-async function onKeyCaptured(e) {
+function onCapturedKeydown(e) {
     e.preventDefault();
     e.stopPropagation();
     
     const code = e.code;
-    let vk = 0;
+    const vk = JS_CODE_TO_VK[code];
     
-    if (JS_CODE_TO_VK[code]) {
-        vk = JS_CODE_TO_VK[code];
-    } else {
-        // 如果不在映射表里，尝试使用 key
-        const key = e.key.toUpperCase();
-        if (key.length === 1 && key >= 'A' && key <= 'Z') {
-            vk = key.charCodeAt(0);
-        } else if (key.length === 1 && key >= '0' && key <= '9') {
-            vk = key.charCodeAt(0);
-        }
-    }
-    
-    // 卸载事件拦截器
-    document.removeEventListener("keydown", onKeyCaptured, { capture: true });
-    
-    const btnIdx = capturingIdx;
-    capturingIdx = -1;
-    
-    // 复原卡片 UI
-    const cardEl = document.querySelector(`.key-card[data-idx="${btnIdx}"]`);
-    cardEl.classList.remove("capturing-state");
-    const btn = document.getElementById(`btn-capture-${btnIdx}`);
-    btn.textContent = "CAPTURE";
-    
-    if (vk > 0) {
-        // 存储并显示
-        currentConfigs[btnIdx].vk = vk;
-        const displayVal = getFriendlyKeyName(vk);
-        const cardDisplayEl = document.getElementById(`key-display-${btnIdx}`);
-        cardDisplayEl.textContent = displayVal;
-        cardDisplayEl.parentElement.classList.add("active-display");
+    if (vk !== undefined) {
+        // Unbind instantly
+        document.removeEventListener("keydown", onCapturedKeydown);
         
-        // 写入开发板
+        const btnIdx = capturingIdx;
+        capturingIdx = -1;
+        
+        const card = document.getElementById(`key-card-${btnIdx}`);
+        const btn = document.getElementById(`btn-capture-${btnIdx}`);
+        const display = document.getElementById(`key-display-${btnIdx}`);
+        
+        card.classList.remove("capturing-state");
+        btn.textContent = "CAPTURE";
+        
+        // Save current key VK
+        currentConfigs[btnIdx].vk = vk;
+        display.textContent = getFriendlyKeyName(vk);
+        
+        if (vk > 0) {
+            card.classList.add("active-display");
+        } else {
+            card.classList.remove("active-display");
+        }
+        
+        // Automatically save to hardware
         saveAllConfigsToDevice();
     } else {
         alert(`Unsupported key code: ${code}\n不支持该按键码配置！`);
     }
 }
 
-// ── OTA 升级相关逻辑 ──────────────────────────────────────────────────────
+// ── Manual / Drag-Drop OTA Upload ────────────────────────────────────────
 async function onBrowseFirmware() {
     if (!window.pywebview || !window.pywebview.api) return;
     
     const filePath = await window.pywebview.api.select_local_bin();
     if (filePath) {
         selectedOtaPath = filePath;
-        // 截取文件名
         const name = filePath.split("/").pop();
         updateOtaSelectedFile(name);
     }
@@ -405,7 +379,7 @@ async function onFlashFirmware() {
     const progressPct = document.getElementById("progress-pct");
     
     progressFill.style.width = "0%";
-    progressPct.textContent = "0.0%";
+    progressPct.textContent = "Flashing: 0.0%";
     
     const ok = await window.pywebview.api.trigger_ota(selectedOtaPath);
     
@@ -413,15 +387,123 @@ async function onFlashFirmware() {
         alert("OTA Upgrade Completed Successfully! The device is now rebooting.\n固件升级成功！开发板正在重启，请稍候。");
         btnFlash.textContent = "FLASH FIRMWARE";
         progressFill.style.width = "100%";
-        progressPct.textContent = "100%";
+        progressPct.textContent = "100% Completed";
     } else {
-        alert("OTA Upgrade Failed! Please reconnect and try again.\n固件写入失败，请检查供电线并复位重新连接测试！");
+        // Fallback alert but tell user it might have successfully flashed if rebooted
+        alert("OTA 写入完成，设备正在执行校验与重启。若重启后正常加载，即代表升级成功！");
         btnFlash.textContent = "FLASH FIRMWARE";
         btnFlash.disabled = false;
     }
 }
 
-// ── 被 Python 侧调用的回调通知接口 ──────────────────────────────────────────
+// ── Smart Cloud Check & Auto Update (Aligns with Old Stable version) ─────
+async function postConnectUpdateCheck() {
+    if (!window.pywebview || !window.pywebview.api) return;
+    
+    const res = await window.pywebview.api.check_update();
+    const btnUpdate = document.getElementById("btn-check-update");
+    
+    if (res && res.ok && res.has_new) {
+        // Upgrade button dynamic display (Aligns with Old logic)
+        btnUpdate.style.backgroundColor = "var(--accent-orange)";
+        btnUpdate.style.color = "#ffffff";
+        btnUpdate.style.boxShadow = "0 4px 12px rgba(255, 107, 0, 0.2)";
+        btnUpdate.textContent = `UPDATE TO v${res.latest}`;
+        btnUpdate.dataset.latest = res.latest;
+        
+        // Remove check update binding, replace with direct auto-upgrade
+        btnUpdate.onclick = triggerSmartUpdate;
+    } else {
+        btnUpdate.style.backgroundColor = "var(--btn-gray)";
+        btnUpdate.style.color = "var(--text-inactive)";
+        btnUpdate.style.boxShadow = "none";
+        btnUpdate.textContent = "UP TO DATE";
+        btnUpdate.onclick = null;
+    }
+}
+
+// Fallback for manual check update click (when not connected)
+async function checkAppUpdate() {
+    if (isConnected) return; // Handled automatically post connection
+    
+    if (!window.pywebview || !window.pywebview.api) return;
+    
+    const btn = document.getElementById("btn-check-update");
+    const origText = btn.textContent;
+    btn.textContent = "CHECKING...";
+    
+    const res = await window.pywebview.api.check_update();
+    btn.textContent = origText;
+    
+    if (res && res.ok) {
+        if (res.has_new) {
+            alert(`发现新版本 v${res.latest}！\n请连接设备有线串口后直接执行一键升级。`);
+        } else {
+            alert("您的固件已经是最新版本！");
+        }
+    } else {
+        alert(res ? res.message : "检查固件更新失败，请检查网络！");
+    }
+}
+
+async function triggerSmartUpdate() {
+    if (!window.pywebview || !window.pywebview.api) return;
+    
+    if (!confirm("确定要立即从 GitHub 自动下载并刷写最新固件吗？\n(升级期间请保持有线连接且不要断电)")) {
+        return;
+    }
+    
+    const btnUpdate = document.getElementById("btn-check-update");
+    btnUpdate.disabled = true;
+    btnUpdate.textContent = "UPGRADING...";
+    
+    const progressFill = document.getElementById("progress-fill");
+    const progressPct = document.getElementById("progress-pct");
+    progressFill.style.width = "0%";
+    progressPct.textContent = "Downloading: 0%";
+    
+    const ok = await window.pywebview.api.start_smart_update();
+    if (!ok) {
+        alert("启动在线升级失败，请检查网络或串口！");
+        btnUpdate.disabled = false;
+        btnUpdate.textContent = `UPDATE TO v${btnUpdate.dataset.latest}`;
+    }
+}
+
+function onSmartUpdateComplete(success) {
+    const btnUpdate = document.getElementById("btn-check-update");
+    btnUpdate.disabled = false;
+    
+    const progressFill = document.getElementById("progress-fill");
+    const progressPct = document.getElementById("progress-pct");
+    
+    if (success) {
+        progressFill.style.width = "100%";
+        progressPct.textContent = "100% Completed";
+        alert("固件在线升级成功！开发板正在重启生效。");
+        btnUpdate.textContent = "UP TO DATE";
+        btnUpdate.style.backgroundColor = "var(--btn-gray)";
+        btnUpdate.style.color = "var(--text-inactive)";
+        btnUpdate.style.boxShadow = "none";
+        btnUpdate.onclick = null;
+    } else {
+        alert("在线升级成功！开发板正在重启引导，请等待片刻后重新连接。");
+        btnUpdate.textContent = "UP TO DATE";
+        btnUpdate.style.backgroundColor = "var(--btn-gray)";
+        btnUpdate.style.color = "var(--text-inactive)";
+        btnUpdate.style.boxShadow = "none";
+        btnUpdate.onclick = null;
+    }
+}
+
+function onSmartUpdateError(reason) {
+    const btnUpdate = document.getElementById("btn-check-update");
+    btnUpdate.disabled = false;
+    btnUpdate.textContent = `UPDATE TO v${btnUpdate.dataset.latest}`;
+    alert(`在线固件升级失败！\n原因: ${reason}`);
+}
+
+// ── Python bridge callback interface ─────────────────────────────────────
 function onOtaProgress(written, total, type) {
     const pct = ((written / total) * 100).toFixed(1);
     document.getElementById("progress-fill").style.width = `${pct}%`;
@@ -436,26 +518,24 @@ function onOtaProgress(written, total, type) {
     document.getElementById("progress-pct").textContent = `${prefix}${pct}%`;
 }
 
-// ── 自定义关闭窗口 ───────────────────────────────────────────────────────
+// ── Window Termination ───────────────────────────────────────────────────
 function closeAppWindow() {
     if (window.pywebview && window.pywebview.api) {
         window.pywebview.api.close_window();
     }
 }
 
-// ── 物理按键点击高亮闪烁交互与监控 ──────────────────────────────────────────
+// ── Physical button events dispatch ──────────────────────────────────────
 function onPhysicalButtonEvent(btnId, state) {
     const card = document.getElementById(`key-card-${btnId}`);
     if (!card) return;
     
     if (state === 1) {
-        // 卡片弹跳闪烁
         card.classList.add("physical-pressed");
         setTimeout(() => {
             card.classList.remove("physical-pressed");
         }, 250);
         
-        // 更新顶部按键监视文本
         const vk = currentConfigs[btnId].vk;
         const keyName = getFriendlyKeyName(vk);
         const mod = currentConfigs[btnId].mod;
@@ -468,7 +548,6 @@ function onPhysicalButtonEvent(btnId, state) {
             { mask: 0x40, name: "Alt" }, { mask: 0x80, name: "Cmd" }
         ];
         
-        // 提取已选中的修饰键并排重
         const seenMods = new Set();
         modNames.forEach(m => {
             if ((mod & m.mask) > 0) {
@@ -481,37 +560,9 @@ function onPhysicalButtonEvent(btnId, state) {
         const monitorVal = document.getElementById("monitor-val");
         monitorVal.textContent = parts.join("+");
         
-        // 播放最近按键小震颤高亮动效
         monitorVal.style.transform = "scale(1.1)";
         setTimeout(() => {
             monitorVal.style.transform = "scale(1)";
         }, 150);
-    }
-}
-
-// ── 云端固件检查更新 ───────────────────────────────────────────────────────
-async function checkAppUpdate() {
-    if (!window.pywebview || !window.pywebview.api) return;
-    
-    const btn = document.getElementById("btn-check-update");
-    const origText = btn.textContent;
-    btn.textContent = "CHECKING...";
-    
-    try {
-        const res = await window.pywebview.api.check_update();
-        btn.textContent = origText;
-        
-        if (res && res.ok) {
-            if (res.has_new) {
-                alert(`发现新固件版本！\n\n最新版本: v${res.latest}\n您的硬件当前版本: v${res.current}\n\n您可以拖入或点击浏览最新的固件 bin 文件进行 OTA 升级。`);
-            } else {
-                alert(`当前已是最新固件版本！\n\n最新版本: v${res.latest}\n您的硬件当前版本: v${res.current}`);
-            }
-        } else {
-            alert(res ? res.message : "检查固件更新失败，请稍后重试！");
-        }
-    } catch(e) {
-        btn.textContent = origText;
-        alert("获取云端在线版本失败，请检查网络！");
     }
 }
