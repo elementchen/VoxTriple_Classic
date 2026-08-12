@@ -203,19 +203,20 @@ def main():
 
     api = Api()
     
-    # 830x700 corresponds directly to the Figma dimensions
+    # Enable window stretching and provide proper content padding
     window = webview.create_window(
         title="VoxTriple Config Client macOS", 
         url=index_path, 
         js_api=api,
-        width=830,
-        height=720, # Extra 20px header room
-        resizable=False
+        width=860,
+        height=760,
+        min_size=(830, 730),
+        resizable=True
     )
     api.set_window(window)
 
     log.info("Starting PyWebView window...")
-    webview.start(debug=True)
+    webview.start(debug=False)
 
 if __name__ == '__main__':
     main()
