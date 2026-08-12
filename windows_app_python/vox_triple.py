@@ -73,9 +73,9 @@ def _build_modifier(vars: dict) -> int:
 class VoxTripleApp:
     def __init__(self, root: tk.Tk):
         self.root = root
-        root.title("VoxTriple Config Client (v1.0.12)")
-        root.geometry("640x700")
-        root.minsize(600, 640)
+        root.title("VoxTriple Config Client (v1.0.13)")
+        root.geometry("830x700")
+        root.minsize(780, 640)
         root.resizable(True, True)
 
         self.spp = spp_client.SppClient()
@@ -173,14 +173,50 @@ class VoxTripleApp:
         # Line 1: Port selectors & Connection Buttons
         ctrl_row = ttk.Frame(top_frame, style="Header.TFrame")
         ctrl_row.pack(fill="x", pady=4)
+        
+        # Connection status dot using Emoji for high-res modern look
+        self._status_dot = tk.Label(ctrl_row, text="🔴", font=("Helvetica", 10), bg=BG_COLOR)
+        self._status_dot.pack(side="left", padx=(4, 2))
+        
         ttk.Label(ctrl_row, text="COM Port / 串口:", font=("Helvetica", 9, "bold"), style="Header.TLabel").pack(side="left", padx=4)
         self._port_combo = ttk.Combobox(ctrl_row, width=16, state="readonly")
         self._port_combo.pack(side="left", padx=4)
         
-        self._conn_btn = ttk.Button(ctrl_row, text="Connect / 连接", command=self._toggle_connect, takefocus=False)
+        # Custom flat high-accent connect button resembling macOS Web UI connect action
+        self._conn_btn = tk.Button(
+            ctrl_row,
+            text="Connect / 连接",
+            command=self._toggle_connect,
+            takefocus=False,
+            bg="#16a085",
+            fg="white",
+            activebackground="#1abc9c",
+            activeforeground="white",
+            relief="flat",
+            bd=0,
+            font=("Helvetica", 9, "bold"),
+            padx=12,
+            pady=3
+        )
         self._conn_btn.pack(side="left", padx=4)
         
-        ttk.Button(ctrl_row, text="Refresh / 刷新", command=self._refresh_ports, takefocus=False).pack(side="left", padx=4)
+        # Flat refresh button matching custom style sheet
+        self._refresh_btn = tk.Button(
+            ctrl_row,
+            text="Refresh / 刷新",
+            command=self._refresh_ports,
+            takefocus=False,
+            bg="#e1e8eb",
+            fg="#2c3e50",
+            activebackground="#d5e0e3",
+            activeforeground="#2c3e50",
+            relief="flat",
+            bd=0,
+            font=("Helvetica", 9, "bold"),
+            padx=12,
+            pady=3
+        )
+        self._refresh_btn.pack(side="left", padx=4)
 
         # Line 2: Status tags (HFP state, Audio link, Firmware version)
         status_row = ttk.Frame(top_frame, style="Header.TFrame")
@@ -258,9 +294,23 @@ class VoxTripleApp:
         ttk.Label(dev_row, text="Microphone / 麦克风:", font=("Helvetica", 9, "bold")).pack(side="left", padx=(16, 4))
         ttk.Checkbutton(dev_row, text="Enabled / 启用", variable=self._mic_enabled, takefocus=False).pack(side="left")
 
-        # Action: Write to Keyboard
-        self._write_btn = ttk.Button(tab_config, text="Write to Keyboard / 写入到蓝牙键盘", command=self._write_device, takefocus=False)
-        self._write_btn.pack(pady=(4, 0), ipadx=20, ipady=4)
+        # Custom premium accent button (Write to Keyboard)
+        self._write_btn = tk.Button(
+            tab_config,
+            text="Write to Keyboard / 写入到蓝牙键盘",
+            command=self._write_device,
+            takefocus=False,
+            bg="#16a085",
+            fg="white",
+            activebackground="#1abc9c",
+            activeforeground="white",
+            relief="flat",
+            bd=0,
+            font=("Helvetica", 10, "bold"),
+            padx=24,
+            pady=6
+        )
+        self._write_btn.pack(pady=(8, 4))
 
         # ==========================================
         # TAB 2: Firmware OTA (固件升级冷更新)
@@ -278,7 +328,22 @@ class VoxTripleApp:
         ota_file_row = ttk.Frame(ota_frame)
         ota_file_row.pack(fill="x", pady=6)
         
-        self._ota_select_btn = ttk.Button(ota_file_row, text="Select / 选择 (.bin)", command=self._select_firmware, takefocus=False)
+        # Custom flat gray select button matching theme
+        self._ota_select_btn = tk.Button(
+            ota_file_row,
+            text="Select / 选择 (.bin)",
+            command=self._select_firmware,
+            takefocus=False,
+            bg="#e1e8eb",
+            fg="#2c3e50",
+            activebackground="#d5e0e3",
+            activeforeground="#2c3e50",
+            relief="flat",
+            bd=0,
+            font=("Helvetica", 9, "bold"),
+            padx=12,
+            pady=3
+        )
         self._ota_select_btn.pack(side="left", padx=4)
         
         self._ota_path_var = tk.StringVar(value="")
@@ -289,7 +354,22 @@ class VoxTripleApp:
         ota_flash_row = ttk.Frame(ota_frame)
         ota_flash_row.pack(fill="x", pady=10)
         
-        self._ota_flash_btn = ttk.Button(ota_flash_row, text="Flash Firmware / 升级固件", command=self._start_ota, takefocus=False)
+        # Custom flat high-accent ota flash button
+        self._ota_flash_btn = tk.Button(
+            ota_flash_row,
+            text="Flash Firmware / 升级固件",
+            command=self._start_ota,
+            takefocus=False,
+            bg="#16a085",
+            fg="white",
+            activebackground="#1abc9c",
+            activeforeground="white",
+            relief="flat",
+            bd=0,
+            font=("Helvetica", 9, "bold"),
+            padx=12,
+            pady=3
+        )
         self._ota_flash_btn.pack(side="left", padx=4)
         
         self._ota_progress_var = tk.DoubleVar(value=0.0)
@@ -336,9 +416,37 @@ class VoxTripleApp:
         key_row = ttk.Frame(group)
         key_row.pack(fill="x", pady=2)
         ttk.Label(key_row, text="Key:", width=5, font=("Helvetica", 9, "bold")).pack(side="left")
-        ttk.Label(key_row, textvariable=b["display"], width=13, relief="sunken", background="#f0f0f0").pack(side="left", padx=4)
         
-        btn = ttk.Button(key_row, text="Capture / 捕获", command=lambda idx=i: self._begin_capture(idx), takefocus=False)
+        # High-res flat gray display card for the key mapping text
+        display_lbl = tk.Label(
+            key_row,
+            textvariable=b["display"],
+            width=15,
+            relief="flat",
+            bg="#ebf0f2",
+            fg="#16a085",
+            font=("Helvetica", 9, "bold"),
+            padx=6,
+            pady=2
+        )
+        display_lbl.pack(side="left", padx=4)
+        
+        # Custom flat capture button mirroring macOS Web UI aesthetics
+        btn = tk.Button(
+            key_row,
+            text="Capture / 捕获",
+            command=lambda idx=i: self._begin_capture(idx),
+            takefocus=False,
+            bg="#e1e8eb",
+            fg="#2c3e50",
+            activebackground="#d5e0e3",
+            activeforeground="#2c3e50",
+            relief="flat",
+            bd=0,
+            font=("Helvetica", 9, "bold"),
+            padx=10,
+            pady=3
+        )
         btn.pack(side="left", padx=4)
         self._cap_btns[i] = btn
 
@@ -399,7 +507,8 @@ class VoxTripleApp:
         ok = await self.spp.connect(port)
         if ok:
             self._connected = True
-            self._conn_btn.configure(text="Disconnect / 断开")
+            self._status_dot.configure(text="🟢")
+            self._conn_btn.configure(text="Disconnect / 断开", bg="#d35400", activebackground="#e67e22")
             self._cfg["device_address"] = port
             config_service.save(self._cfg)
             self._status_text.set(f"Connected: {port}")
@@ -444,7 +553,8 @@ class VoxTripleApp:
         ok = await self.spp.connect(last_port)
         if ok:
             self._connected = True
-            self._conn_btn.configure(text="Disconnect / 断开")
+            self._status_dot.configure(text="🟢")
+            self._conn_btn.configure(text="Disconnect / 断开", bg="#d35400", activebackground="#e67e22")
             self._status_text.set(f"Connected: {last_port}")
             for i in range(4):
                 r = await self.spp.read_button_mapping(i)
@@ -473,7 +583,8 @@ class VoxTripleApp:
     def _disconnect(self):
         self.spp.disconnect_sync()
         self._connected = False
-        self._conn_btn.configure(text="Connect / 连接")
+        self._status_dot.configure(text="🔴")
+        self._conn_btn.configure(text="Connect / 连接", bg="#16a085", activebackground="#1abc9c")
         self._status_text.set("Disconnected.")
         self._version_label.configure(text="Firmware: --")
         self._board_version = None
@@ -590,7 +701,13 @@ class VoxTripleApp:
     def _begin_capture(self, idx: int):
         self._capture_idx = idx
         self._btn[idx]["capturing"] = True
-        self._cap_btns[idx].configure(text="Capturing… press any key / 按任意键…")
+        self._cap_btns[idx].configure(
+            text="Capturing… / 捕获中…",
+            bg="#ffece6",
+            fg="#d35400",
+            activebackground="#ffece6",
+            activeforeground="#d35400"
+        )
         keyboard_io.start_key_capture(self._on_key_captured, tk_root=self.root)
 
     def _on_key_captured(self, vk: int, is_extended: bool, scan_code: int):
@@ -618,7 +735,13 @@ class VoxTripleApp:
         self._update_display(idx)
         self._btn[idx]["capturing"] = False
         self._capture_idx = -1
-        self._cap_btns[idx].configure(text="Capture / 捕获")
+        self._cap_btns[idx].configure(
+            text="Capture / 捕获",
+            bg="#e1e8eb",
+            fg="#2c3e50",
+            activebackground="#d5e0e3",
+            activeforeground="#2c3e50"
+        )
 
     # ── BLE callbacks ────────────────────────────────────────────
     def _on_button_event(self, btn_id: int, state: int):
