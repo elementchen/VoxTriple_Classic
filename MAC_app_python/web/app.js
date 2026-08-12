@@ -260,7 +260,11 @@ function getFriendlyKeyName(vk) {
 async function toggleMod(btnIdx, mask) {
     if (!isConnected) return;
     
-    const pill = document.querySelector(`#mods-${btnIdx} .mod-pill[data-mask="${mask}"]`);
+    // 转换为十六进制字符串，如 1 变成 "0x01"，16 变成 "0x10"，以便与 HTML 属性精准匹配
+    const hexStr = "0x" + mask.toString(16).padStart(2, "0");
+    const pill = document.querySelector(`#mods-${btnIdx} .mod-pill[data-mask="${hexStr}"]`);
+    if (!pill) return;
+    
     const wasActive = pill.classList.contains("active");
     
     if (wasActive) {

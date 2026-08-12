@@ -305,23 +305,28 @@ select:hover {
     background-color: #ff3b30;
 }
 
-.btn-write-config {
+.btn-write-config-large {
     background-color: #2ed573;
     color: #ffffff;
-    box-shadow: 0 4px 12px rgba(46, 213, 115, 0.2);
-    border-radius: 16px;
-    padding: 0 20px;
-    margin-left: 12px;
-    font-weight: 750;
-    height: 32px;
+    box-shadow: 0 4px 14px rgba(46, 213, 115, 0.25);
+    border-radius: 20px;
+    padding: 0 24px;
+    font-weight: 800;
+    font-size: 11px;
+    letter-spacing: 0.8px;
+    height: 40px;
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
-.btn-write-config:not([disabled]):hover {
+.btn-write-config-large:not([disabled]):hover {
     opacity: 0.9;
     transform: scale(0.98);
 }
 
-.btn-write-config[disabled] {
+.btn-write-config-large[disabled] {
     background-color: var(--btn-gray);
     color: var(--text-inactive);
     box-shadow: none;

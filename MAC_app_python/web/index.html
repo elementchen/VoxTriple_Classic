@@ -45,7 +45,6 @@
             </div>
             
             <button class="btn btn-connect" id="btn-connect">CONNECT</button>
-            <button class="btn btn-write-config" id="btn-write-config" onclick="saveAllConfigsToDevice()" disabled>WRITE CONFIG</button>
             
             <div class="divider"></div>
             
@@ -217,6 +216,11 @@
                                 <div class="power-segment" data-level="7" onclick="setTxPower(7)"></div>
                             </div>
                         </div>
+                    </div>
+                    
+                    <!-- 一键保存配置到开发板的写入按钮板块 -->
+                    <div class="setting-card write-card" style="padding: 12px; display: flex; justify-content: center; margin-top: 12px;">
+                        <button class="btn btn-write-config-large" id="btn-write-config" onclick="saveAllConfigsToDevice()" disabled>WRITE TO ESP32</button>
                     </div>
                 </div>
 
