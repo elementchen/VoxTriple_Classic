@@ -140,6 +140,10 @@ async function onConnectClick() {
                 renderConfig(config);
             }
             
+            // 展示固件版本信息区块
+            const fwSection = document.getElementById("firmware-section");
+            if (fwSection) fwSection.style.display = "flex";
+            
             // Perform automatic update check (Silent checking on connection)
             postConnectUpdateCheck();
         } else {
@@ -162,6 +166,10 @@ async function onConnectClick() {
         const btnUpdate = document.getElementById("btn-update-trigger");
         if (btnUpdate) btnUpdate.style.display = "none";
         document.getElementById("firmware-status-label").textContent = "";
+        
+        // 隐藏固件版本信息区块
+        const fwSection = document.getElementById("firmware-section");
+        if (fwSection) fwSection.style.display = "none";
         
         resetConfigUi();
     }

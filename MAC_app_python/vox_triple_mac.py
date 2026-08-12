@@ -306,8 +306,24 @@ def main():
     )
     api.set_window(window)
 
+    def setup_nswindow():
+        try:
+            from AppKit import NSWindowTitleHidden, NSWindowStyleMaskFullSizeContentView
+            nswindow = window.native
+            # 1. 隐藏标题栏文字
+            nswindow.setTitleVisibility_(NSWindowTitleHidden)
+            # 2. 标题栏透明且延伸网页视口到标题栏后方
+            nswindow.setTitlebarAppearsTransparent_(True)
+            nswindow.setStyleMask_(nswindow.styleMask() | NSWindowStyleMaskFullSizeContentView)
+            # 3. 隐藏标题栏底部分割线 (macOS 11.0+)
+            if hasattr(nswindow, 'setTitlebarSeparatorStyle_'):
+                nswindow.setTitlebarSeparatorStyle_(0)  # NSWindowTitlebarSeparatorStyleNone = 0
+            log.info("Cocoa NSWindow styling successfully applied.")
+        except Exception as e:
+            log.warning(f"Failed to style native NSWindow: {e}")
+
     log.info("Starting PyWebView window...")
-    webview.start(debug=False)
+    webview.start(setup_nswindow, debug=False)
 
 if __name__ == '__main__':
     main()
