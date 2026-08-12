@@ -135,27 +135,28 @@ body {
 
 /* 标题栏最右：关闭 App 按钮 */
 .btn-close-app {
-    width: 28px;
-    height: 28px;
+    width: 14px;
+    height: 14px;
     border: none;
     border-radius: 50%;
-    background: var(--bg-card);
-    color: var(--text-inactive);
-    font-size: 18px;
-    font-weight: 400;
+    background: #ff3b30;
+    color: transparent; /* 默认隐藏 X */
+    font-size: 10px;
+    font-weight: 900;
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: all 0.2s ease;
-    box-shadow: var(--shadow-soft);
+    transition: all 0.15s ease;
+    box-shadow: 0 2px 6px rgba(255, 59, 48, 0.2);
     -webkit-app-region: no-drag; /* 按钮禁用拖拽 */
+    padding: 0;
+    line-height: 1;
 }
 
 .btn-close-app:hover {
-    color: #ff3b30;
-    background-color: #ff3b3020;
-    transform: scale(1.05);
+    color: #ffffff; /* 悬停时在红色背景上显示白色 X */
+    transform: scale(1.1);
 }
 
 /* ── 2. 设备连接控制横栏 (第二行) ──────────────────────────────────────── */
@@ -306,9 +307,9 @@ select:hover {
 }
 
 .btn-write-config-large {
-    background-color: #2ed573;
+    background-color: var(--accent-orange);
     color: #ffffff;
-    box-shadow: 0 4px 14px rgba(46, 213, 115, 0.25);
+    box-shadow: 0 4px 14px rgba(255, 107, 0, 0.25);
     border-radius: 20px;
     padding: 0 24px;
     font-weight: 800;
@@ -331,6 +332,15 @@ select:hover {
     color: var(--text-inactive);
     box-shadow: none;
     cursor: not-allowed;
+}
+
+.write-btn-wrapper {
+    padding: 0;
+    margin-top: 12px;
+    width: 100%;
+    background: transparent;
+    border: none;
+    box-shadow: none;
 }
 
 .firmware-section {
