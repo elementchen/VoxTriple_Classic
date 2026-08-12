@@ -10,7 +10,7 @@
 
 ----
 
-## 🚀 Quick Start / 极速新手指南 (小白必读)
+## 🚀 Quick Start / 极速新手指南
 
 为了让不懂代码、不熟悉开发环境的小白用户以最傻瓜式的方式运行本项目，我们提供以下极速上手指引。请根据您的设备状态选择对应操作：
 
@@ -101,7 +101,7 @@ Onboard LED (板载蓝色贴片指示灯) → ESP32:
 ## Setup & Flash Guide / 固件编译烧录
 
 > [!TIP]
-> **如果您是普通用户（不懂代码、未安装 Python 及 ESP-IDF 开发环境）**，请直接跳转阅读我们专门为您准备的傻瓜式：
+> **如果您是普通用户（不懂代码、未安装 Python 及 ESP-IDF 开发环境）**，请直接跳转阅读我们专门为您准备的：
 > 👉 **[新手固件烧录与更新指南 (docs/flash_guide_zh.md)](docs/flash_guide_zh.md)**。
 >
 > If you are a general user (not familiar with coding, terminal commands or ESP-IDF build tools), please read our beginner-friendly tutorial:
