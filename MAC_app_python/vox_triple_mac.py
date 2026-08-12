@@ -15,6 +15,7 @@ import json
 import threading
 import webview
 import serial.tools.list_ports
+import subprocess
 
 # Import shared modules from sibling windows_app_python directory
 _shared = os.path.join(os.path.dirname(__file__), "..", "windows_app_python")
@@ -115,13 +116,29 @@ class Api:
         return ok
 
     def select_local_bin(self) -> str | None:
-        """Select a local firmware file using macOS native OPEN file dialog."""
-        if not self._window:
-            return None
-        file_types = ('Firmware Files (*.bin)', '*.bin')
-        res = self._window.create_file_dialog(webview.OPEN_DIALOG, file_types=file_types)
-        if res and len(res) > 0:
-            return res[0]
+        """Select a local firmware file using macOS Finder dialog (via AppleScript to bypass Frameless Sandboxing)."""
+        log.info("Opening Finder file selection dialog...")
+        script = 'POSIX path of (choose file of type {"bin"} with prompt "Select VoxTriple firmware file (.bin):")'
+        try:
+            res = subprocess.run(
+                ["osascript", "-e", script], 
+                capture_output=True, 
+                text=True, 
+                timeout=30.0
+            )
+            if res.returncode == 0:
+                path = res.stdout.strip()
+                log.info(f"User selected file via AppleScript Finder: {path}")
+                return path
+        except Exception as e:
+            log.warning(f"AppleScript file dialog failed: {e}, falling back to native webview dialog")
+            
+        # Fallback to standard webview dialog
+        if self._window:
+            file_types = ('Firmware Files (*.bin)', '*.bin')
+            res = self._window.create_file_dialog(webview.OPEN_DIALOG, file_types=file_types)
+            if res and len(res) > 0:
+                return res[0]
         return None
 
     def trigger_ota(self, bin_path: str) -> bool:
@@ -132,7 +149,6 @@ class Api:
         log.info(f"Starting OTA update with file: {bin_path}")
         
         def progress_cb(written, total):
-            # Safe dispatch back to Webview container thread
             if self._window:
                 self._window.evaluate_js(f"onOtaProgress({written}, {total})")
 
@@ -140,28 +156,91 @@ class Api:
         ok = future.result(timeout=60.0)
         return ok
 
-    def check_update(self):
-        """Check GitHub latest update version and prompt user."""
+    def check_update(self) -> dict:
+        """Check GitHub latest update version and return results to JS."""
         future = run_coro(self._check_github_version())
-        future.result(timeout=5.0)
-        
+        try:
+            future.result(timeout=4.0)
+        except Exception as e:
+            log.warning(f"check_update network request failed/timeout: {e}")
+            
         if self._github_version:
-            msg = f"Latest version online: v{self._github_version}\n"
-            if self._connected:
-                curr = self.spp._config_cache.get("version", "1.0.9")
-                msg += f"Your board version: v{curr}\n\n"
-                if self._github_version > curr:
-                    msg += "New version available! You can select or drag the bin file to update.\n发现新固件版本！你可以拖入或选择固件进行升级。"
-                else:
-                    msg += "Your device is up to date!\n当前设备固件已是最新版！"
-            else:
-                msg += "\nPlease connect to device over serial first to compare versions.\n请先连接串口，以便对比版本。"
-                
-            if self._window:
-                self._window.show_dialog("Version Check", msg)
+            curr = self.spp._config_cache.get("version", "1.0.10")
+            has_new = self._github_version > curr
+            return {
+                "ok": True,
+                "latest": self._github_version,
+                "current": curr,
+                "has_new": has_new,
+                "message": f"Latest version: v{self._github_version}\nYour board version: v{curr}"
+            }
         else:
+            return {
+                "ok": False,
+                "message": "Failed to fetch updates from GitHub.\n获取 GitHub 在线更新版本失败，请检查网络！"
+            }
+
+    def start_smart_update(self) -> bool:
+        """Automatically download latest firmware and trigger OTA flash."""
+        if not self._connected or not self._github_version or not self._github_bin_url:
+            return False
+        # Run smart update in background thread to avoid blocking JS
+        threading.Thread(target=lambda: run_coro(self._do_smart_update()), daemon=True).start()
+        return True
+
+    async def _do_smart_update(self):
+        cache_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "cache")
+        os.makedirs(cache_dir, exist_ok=True)
+        filename = f"esp32_bt_mic_v{self._github_version}.bin"
+        save_path = os.path.join(cache_dir, filename)
+        
+        if os.path.exists(save_path) and os.path.getsize(save_path) > 100000:
+            log.info("Found cached bin. Flashing...")
+        else:
+            log.info(f"Downloading from {self._github_bin_url}...")
+            try:
+                await self._download_firmware_async(self._github_bin_url, save_path)
+            except Exception as e:
+                log.error(f"Download failed: {e}")
+                if self._window:
+                    self._window.evaluate_js(f"alert('Download failed: {str(e)}')")
+                return
+                
+        log.info("Flashing downloaded firmware...")
+        def progress_cb(written, total):
             if self._window:
-                self._window.show_dialog("Error", "Failed to fetch updates from GitHub.\n获取 GitHub 在线更新版本失败，请检查网络！")
+                self._window.evaluate_js(f"onOtaProgress({written}, {total}, 'flash')")
+
+        try:
+            ok = await self.spp.upload_firmware(save_path, progress_cb)
+            if self._window:
+                if ok:
+                    self._window.evaluate_js("alert('OTA Upgrade Completed Successfully! The device is now rebooting.\\n固件升级成功！开发板正在重启，请稍候。')")
+                else:
+                    self._window.evaluate_js("alert('OTA Upgrade Failed! Please reconnect and try again.\\n固件写入失败，请检查供电线并复位重新连接测试！')")
+        except Exception as e:
+            log.error(f"Flash failed: {e}")
+            if self._window:
+                self._window.evaluate_js(f"alert('Flash failed: {str(e)}')")
+
+    async def _download_firmware_async(self, download_url, save_path):
+        loop = asyncio.get_running_loop()
+        def do_download():
+            req = urllib.request.Request(download_url, headers={"User-Agent": "VoxTriple-App"})
+            with urllib.request.urlopen(req) as response:
+                total_size = int(response.headers.get('content-length', 0))
+                bytes_read = 0
+                with open(save_path, "wb") as f:
+                    while True:
+                        chunk = response.read(8192)
+                        if not chunk:
+                            break
+                        f.write(chunk)
+                        bytes_read += len(chunk)
+                        if self._window and total_size > 0:
+                            self._window.evaluate_js(f"onOtaProgress({bytes_read}, {total_size}, 'download')")
+                            
+        await loop.run_in_executor(None, do_download)
 
     def close_window(self):
         """Safely and immediately terminate the application process to avoid Cocoa thread deadlocks."""

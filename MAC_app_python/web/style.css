@@ -93,42 +93,44 @@ body {
     margin-left: 6px;
 }
 
-/* 标题栏居中：最近按键监测反馈 */
-.titlebar-center {
-    flex-grow: 1;
+/* 底部居中：最近按键监测反馈 */
+.bottom-monitor-bar {
+    width: 100%;
     display: flex;
     justify-content: center;
-    -webkit-app-region: no-drag;
+    align-items: center;
+    margin-top: 4px;
 }
 
 .live-monitor {
     background-color: var(--bg-card);
     border-radius: 20px;
-    padding: 6px 16px;
+    padding: 8px 24px;
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 12px;
     box-shadow: var(--shadow-soft);
-    border: 1px solid rgba(0, 0, 0, 0.01);
+    border: 1px solid rgba(0, 0, 0, 0.04);
 }
 
 .monitor-label {
-    font-size: 9px;
+    font-size: 10px;
     font-weight: 800;
     color: var(--text-inactive);
     letter-spacing: 0.8px;
 }
 
 .monitor-value {
-    font-size: 12px;
+    font-size: 13px;
     font-weight: 800;
     color: var(--accent-orange);
     letter-spacing: 0.5px;
     background: var(--accent-orange-bg);
-    padding: 2px 8px;
-    border-radius: 10px;
-    min-width: 60px;
+    padding: 3px 12px;
+    border-radius: 12px;
+    min-width: 80px;
     text-align: center;
+    transition: transform 0.1s ease;
 }
 
 /* 标题栏最右：关闭 App 按钮 */

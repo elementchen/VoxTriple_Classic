@@ -55,10 +55,23 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById("btn-connect").addEventListener("click", onConnectClick);
     
     // 监听检查更新按钮
-    document.getElementById("btn-check-update").addEventListener("click", () => {
-        if (window.pywebview && window.pywebview.api) {
-            window.pywebview.api.check_update();
-        }
+    document.getElementById("btn-check-update").addEventListener("click", checkAppUpdate);
+    
+    // 打开 App 时延迟 1.5 秒自动静默检查更新，若有更新则高亮更新按钮
+    window.addEventListener('pywebviewready', () => {
+        setTimeout(async () => {
+            if (window.pywebview && window.pywebview.api) {
+                const res = await window.pywebview.api.check_update();
+                if (res && res.ok && res.has_new) {
+                    const btn = document.getElementById("btn-check-update");
+                    if (btn) {
+                        btn.style.backgroundColor = "var(--accent-orange-bg)";
+                        btn.style.color = "var(--accent-orange)";
+                        btn.textContent = "NEW FIRMWARE";
+                    }
+                }
+            }
+        }, 1500);
     });
 
     // 拖拽文件 OTA 绑定
@@ -409,10 +422,18 @@ async function onFlashFirmware() {
 }
 
 // ── 被 Python 侧调用的回调通知接口 ──────────────────────────────────────────
-function onOtaProgress(written, total) {
+function onOtaProgress(written, total, type) {
     const pct = ((written / total) * 100).toFixed(1);
     document.getElementById("progress-fill").style.width = `${pct}%`;
-    document.getElementById("progress-pct").textContent = `${pct}%`;
+    
+    let prefix = "Flashing: ";
+    if (type === "download") {
+        prefix = "Downloading: ";
+    } else if (type === "flash") {
+        prefix = "Flashing: ";
+    }
+    
+    document.getElementById("progress-pct").textContent = `${prefix}${pct}%`;
 }
 
 // ── 自定义关闭窗口 ───────────────────────────────────────────────────────
@@ -465,5 +486,32 @@ function onPhysicalButtonEvent(btnId, state) {
         setTimeout(() => {
             monitorVal.style.transform = "scale(1)";
         }, 150);
+    }
+}
+
+// ── 云端固件检查更新 ───────────────────────────────────────────────────────
+async function checkAppUpdate() {
+    if (!window.pywebview || !window.pywebview.api) return;
+    
+    const btn = document.getElementById("btn-check-update");
+    const origText = btn.textContent;
+    btn.textContent = "CHECKING...";
+    
+    try {
+        const res = await window.pywebview.api.check_update();
+        btn.textContent = origText;
+        
+        if (res && res.ok) {
+            if (res.has_new) {
+                alert(`发现新固件版本！\n\n最新版本: v${res.latest}\n您的硬件当前版本: v${res.current}\n\n您可以拖入或点击浏览最新的固件 bin 文件进行 OTA 升级。`);
+            } else {
+                alert(`当前已是最新固件版本！\n\n最新版本: v${res.latest}\n您的硬件当前版本: v${res.current}`);
+            }
+        } else {
+            alert(res ? res.message : "检查固件更新失败，请稍后重试！");
+        }
+    } catch(e) {
+        btn.textContent = origText;
+        alert("获取云端在线版本失败，请检查网络！");
     }
 }

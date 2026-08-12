@@ -8,7 +8,7 @@
 </head>
 <body>
     <div class="app-container">
-        <!-- 1. 全等宽自定义窗口标题栏（支持拖拽 & 居中按键测试显示） -->
+        <!-- 1. 全等宽自定义窗口标题栏（支持拖拽 & 最右侧关闭按钮） -->
         <div class="custom-titlebar">
             <div class="logo-card">
                 <img src="logo.png" alt="Logo" class="logo-img">
@@ -16,19 +16,11 @@
                 <span class="logo-version" id="app-version">v1.0.13</span>
             </div>
             
-            <!-- 居中：物理按键实时监控反馈 (补齐老版本按键测试核心功能) -->
-            <div class="titlebar-center">
-                <div class="live-monitor" id="live-monitor-container">
-                    <span class="monitor-label">LAST KEY EVENT</span>
-                    <span class="monitor-value" id="monitor-val">NONE</span>
-                </div>
-            </div>
-            
             <!-- 右侧关闭按钮 -->
             <button class="btn-close-app" id="btn-close-app" onclick="closeAppWindow()" title="Close Application">×</button>
         </div>
 
-        <!-- 2. 全等宽设备连接控制横栏 (换至新行并新增刷新串口按钮) -->
+        <!-- 2. 全等宽设备连接控制横栏 -->
         <div class="device-connection-bar">
             <div class="status-indicator">
                 <span class="status-dot disconnected" id="status-dot"></span>
@@ -61,7 +53,7 @@
                 <span class="firmware-version" id="firmware-ver">v--</span>
             </div>
             
-            <button class="btn btn-update-check" id="btn-check-update">CHECK UPDATE</button>
+            <button class="btn btn-update-check" id="btn-check-update" onclick="checkAppUpdate()">CHECK UPDATE</button>
         </div>
 
         <!-- 3. 键盘按键映射配置区域 -->
@@ -254,6 +246,14 @@
                 </div>
             </div>
         </main>
+        
+        <!-- 4. 底部居中状态监视栏（从顶部下移，空间更宽裕且醒目） -->
+        <div class="bottom-monitor-bar">
+            <div class="live-monitor" id="live-monitor-container">
+                <span class="monitor-label">LAST PHYSICAL KEY EVENT</span>
+                <span class="monitor-value" id="monitor-val">NONE</span>
+            </div>
+        </div>
     </div>
     
     <script src="app.js"></script>
