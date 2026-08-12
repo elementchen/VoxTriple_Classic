@@ -16,7 +16,7 @@ if os.path.isdir(_shared):
 _SITE = os.path.join(sys.prefix, 'lib',
     f'python{sys.version_info.major}.{sys.version_info.minor}', 'site-packages')
 _PYOBJC_PKGS = ('Quartz', 'AppKit', 'CoreFoundation', 'CoreBluetooth',
-                'Foundation', 'CoreText', 'objc')
+                'Foundation', 'CoreText', 'objc', 'WebKit', 'UniformTypeIdentifiers')
 _bins = []
 for _pkg in _PYOBJC_PKGS:
     _pkg_path = os.path.join(_SITE, _pkg.replace('.', os.sep))
@@ -29,7 +29,7 @@ a = Analysis(
     ['vox_triple_mac.py'],
     pathex=[_shared],
     binaries=_bins,
-    datas=[],
+    datas=[('web', 'web')],
     hiddenimports=[
         'spp_client',
         'config_service',
@@ -44,15 +44,10 @@ a = Analysis(
         # CoreBluetooth + Foundation
         'CoreBluetooth',
         'Foundation',
-        # pynput
-        'pynput',
-        'pynput.keyboard',
-        'pynput.keyboard._darwin',
-        'pynput.keyboard._base',
-        'pynput._util',
-        'pynput._util.darwin',
-        'pynput.mouse',
-        'pynput.mouse._darwin',
+        # pywebview
+        'webview',
+        'WebKit',
+        'UniformTypeIdentifiers',
         # pyobjc — force all sub-packages for lazy loading to work
         'objc',
         'Quartz',

@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VoxTriple Config Client</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- 头部导航与状态栏 -->
+        <header class="app-header">
+            <!-- Logo 卡片 -->
+            <div class="logo-card">
+                <img src="logo.png" alt="Logo" class="logo-img">
+                <div class="logo-text">
+                    <span class="logo-title">KeyMapper</span>
+                    <span class="logo-version" id="app-version">v1.0.13</span>
+                </div>
+            </div>
+
+            <!-- 连接与设备控制面板 -->
+            <div class="control-panel">
+                <div class="status-indicator">
+                    <span class="status-dot disconnected" id="status-dot"></span>
+                    <span class="status-text" id="status-text">Disconnected</span>
+                </div>
+                
+                <div class="divider"></div>
+                
+                <div class="port-section">
+                    <label for="port-select" class="control-label">PORT</label>
+                    <div class="select-wrapper">
+                        <select id="port-select">
+                            <option value="">No Devices</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <button class="btn btn-connect" id="btn-connect">CONNECT</button>
+                
+                <div class="divider"></div>
+                
+                <div class="firmware-section">
+                    <span class="control-label">FIRMWARE</span>
+                    <span class="firmware-version" id="firmware-ver">v--</span>
+                </div>
+                
+                <button class="btn btn-update-check" id="btn-check-update">CHECK UPDATE</button>
+            </div>
+        </header>
+
+        <!-- 键盘按键映射配置区域 -->
+        <main class="main-layout">
+            <section class="section key-mapping-section">
+                <div class="section-header">
+                    <h2 class="section-title">KEY MAPPING</h2>
+                    <span class="section-tips" id="mapping-tips">Click Capture · press any key</span>
+                </div>
+                
+                <div class="key-grid">
+                    <!-- Key 1 -->
+                    <div class="key-card" data-idx="0">
+                        <div class="key-card-header">
+                            <span class="key-card-title">KEY 1</span>
+                            <button class="btn-capture" id="btn-capture-0" onclick="startKeyCapture(0)">CAPTURE</button>
+                        </div>
+                        <div class="key-display" id="key-display-0">--</div>
+                        <div class="modifiers-container" id="mods-0">
+                            <div class="mods-row">
+                                <span class="mod-pill" data-mask="0x01" onclick="toggleMod(0, 0x01)">L·Ctrl</span>
+                                <span class="mod-pill" data-mask="0x02" onclick="toggleMod(0, 0x02)">L·Shift</span>
+                                <span class="mod-pill" data-mask="0x04" onclick="toggleMod(0, 0x04)">L·Alt</span>
+                                <span class="mod-pill" data-mask="0x08" onclick="toggleMod(0, 0x08)">L·Meta</span>
+                            </div>
+                            <div class="mods-row">
+                                <span class="mod-pill" data-mask="0x10" onclick="toggleMod(0, 0x10)">R·Ctrl</span>
+                                <span class="mod-pill" data-mask="0x20" onclick="toggleMod(0, 0x20)">R·Shift</span>
+                                <span class="mod-pill" data-mask="0x40" onclick="toggleMod(0, 0x40)">R·Alt</span>
+                                <span class="mod-pill" data-mask="0x80" onclick="toggleMod(0, 0x80)">R·Meta</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Key 2 -->
+                    <div class="key-card" data-idx="1">
+                        <div class="key-card-header">
+                            <span class="key-card-title">KEY 2</span>
+                            <button class="btn-capture" id="btn-capture-1" onclick="startKeyCapture(1)">CAPTURE</button>
+                        </div>
+                        <div class="key-display" id="key-display-1">--</div>
+                        <div class="modifiers-container" id="mods-1">
+                            <div class="mods-row">
+                                <span class="mod-pill" data-mask="0x01" onclick="toggleMod(1, 0x01)">L·Ctrl</span>
+                                <span class="mod-pill" data-mask="0x02" onclick="toggleMod(1, 0x02)">L·Shift</span>
+                                <span class="mod-pill" data-mask="0x04" onclick="toggleMod(1, 0x04)">L·Alt</span>
+                                <span class="mod-pill" data-mask="0x08" onclick="toggleMod(1, 0x08)">L·Meta</span>
+                            </div>
+                            <div class="mods-row">
+                                <span class="mod-pill" data-mask="0x10" onclick="toggleMod(1, 0x10)">R·Ctrl</span>
+                                <span class="mod-pill" data-mask="0x20" onclick="toggleMod(1, 0x20)">R·Shift</span>
+                                <span class="mod-pill" data-mask="0x40" onclick="toggleMod(1, 0x40)">R·Alt</span>
+                                <span class="mod-pill" data-mask="0x80" onclick="toggleMod(1, 0x80)">R·Meta</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Key 3 -->
+                    <div class="key-card" data-idx="2">
+                        <div class="key-card-header">
+                            <span class="key-card-title">KEY 3</span>
+                            <button class="btn-capture" id="btn-capture-2" onclick="startKeyCapture(2)">CAPTURE</button>
+                        </div>
+                        <div class="key-display" id="key-display-2">--</div>
+                        <div class="modifiers-container" id="mods-2">
+                            <div class="mods-row">
+                                <span class="mod-pill" data-mask="0x01" onclick="toggleMod(2, 0x01)">L·Ctrl</span>
+                                <span class="mod-pill" data-mask="0x02" onclick="toggleMod(2, 0x02)">L·Shift</span>
+                                <span class="mod-pill" data-mask="0x04" onclick="toggleMod(2, 0x04)">L·Alt</span>
+                                <span class="mod-pill" data-mask="0x08" onclick="toggleMod(2, 0x08)">L·Meta</span>
+                            </div>
+                            <div class="mods-row">
+                                <span class="mod-pill" data-mask="0x10" onclick="toggleMod(2, 0x10)">R·Ctrl</span>
+                                <span class="mod-pill" data-mask="0x20" onclick="toggleMod(2, 0x20)">R·Shift</span>
+                                <span class="mod-pill" data-mask="0x40" onclick="toggleMod(2, 0x40)">R·Alt</span>
+                                <span class="mod-pill" data-mask="0x80" onclick="toggleMod(2, 0x80)">R·Meta</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Key 4 -->
+                    <div class="key-card" data-idx="3">
+                        <div class="key-card-header">
+                            <span class="key-card-title">KEY 4</span>
+                            <button class="btn-capture" id="btn-capture-3" onclick="startKeyCapture(3)">CAPTURE</button>
+                        </div>
+                        <div class="key-display" id="key-display-3">--</div>
+                        <div class="modifiers-container" id="mods-3">
+                            <div class="mods-row">
+                                <span class="mod-pill" data-mask="0x01" onclick="toggleMod(3, 0x01)">L·Ctrl</span>
+                                <span class="mod-pill" data-mask="0x02" onclick="toggleMod(3, 0x02)">L·Shift</span>
+                                <span class="mod-pill" data-mask="0x04" onclick="toggleMod(3, 0x04)">L·Alt</span>
+                                <span class="mod-pill" data-mask="0x08" onclick="toggleMod(3, 0x08)">L·Meta</span>
+                            </div>
+                            <div class="mods-row">
+                                <span class="mod-pill" data-mask="0x10" onclick="toggleMod(3, 0x10)">R·Ctrl</span>
+                                <span class="mod-pill" data-mask="0x20" onclick="toggleMod(3, 0x20)">R·Shift</span>
+                                <span class="mod-pill" data-mask="0x40" onclick="toggleMod(3, 0x40)">R·Alt</span>
+                                <span class="mod-pill" data-mask="0x80" onclick="toggleMod(3, 0x80)">R·Meta</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 下半部分功能布局 -->
+            <div class="bottom-layout">
+                <!-- 左下：硬件级设置控制面板 -->
+                <div class="left-settings">
+                    <!-- 麦克风控制卡片 -->
+                    <div class="setting-card mic-card">
+                        <div class="setting-icon-desc">
+                            <svg class="setting-svg" viewBox="0 0 24 24" width="24" height="24">
+                                <path fill="currentColor" d="M12 2c1.66 0 3 1.34 3 3v7c0 1.66-1.34 3-3 3s-3-1.34-3-3V5c0-1.66 1.34-3 3-3zm7 10c0 3.53-2.61 6.43-6 6.92V21h-2v-2.08c-3.39-.49-6-3.39-6-6.92h2c0 2.76 2.24 5 5 5s5-2.24 5-5h2z"/>
+                            </svg>
+                            <div class="setting-texts">
+                                <span class="setting-name">Microphone</span>
+                                <span class="setting-sub">Voice trigger input</span>
+                            </div>
+                        </div>
+                        <label class="switch-toggle">
+                            <input type="checkbox" id="mic-toggle" onchange="onMicToggle()">
+                            <span class="switch-slider"></span>
+                        </label>
+                    </div>
+
+                    <!-- 硬件省电与功率设置卡片 -->
+                    <div class="setting-card power-card-main">
+                        <div class="power-section-header">POWER SAVING</div>
+                        
+                        <div class="power-row">
+                            <div class="setting-texts">
+                                <span class="setting-name">Sleep Mode</span>
+                                <span class="setting-sub">Auto sleep after 10 min</span>
+                            </div>
+                            <label class="switch-toggle">
+                                <input type="checkbox" id="sleep-toggle" onchange="onSleepToggle()">
+                                <span class="switch-slider"></span>
+                            </label>
+                        </div>
+                        
+                        <div class="power-row-tx">
+                            <div class="tx-text-header">
+                                <span class="setting-name">TX Power</span>
+                                <span class="tx-val-badge" id="tx-power-val">-3 dBm</span>
+                            </div>
+                            <!-- 8格分段式功率选择器 -->
+                            <div class="power-bar-segments" id="tx-power-bar">
+                                <div class="power-segment" data-level="0" onclick="setTxPower(0)"></div>
+                                <div class="power-segment" data-level="1" onclick="setTxPower(1)"></div>
+                                <div class="power-segment" data-level="2" onclick="setTxPower(2)"></div>
+                                <div class="power-segment" data-level="3" onclick="setTxPower(3)"></div>
+                                <div class="power-segment" data-level="4" onclick="setTxPower(4)"></div>
+                                <div class="power-segment" data-level="5" onclick="setTxPower(5)"></div>
+                                <div class="power-segment" data-level="6" onclick="setTxPower(6)"></div>
+                                <div class="power-segment" data-level="7" onclick="setTxPower(7)"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 右下：OTA固件在线升级模块 -->
+                <div class="right-ota">
+                    <div class="ota-card">
+                        <div class="power-section-header">OTA FIRMWARE UPDATE</div>
+                        
+                        <div class="ota-sub-header">Firmware File</div>
+                        
+                        <!-- 拖拽/点击上传虚线区域 -->
+                        <div class="upload-dropzone" id="dropzone" onclick="onBrowseFirmware()">
+                            <svg class="upload-svg" viewBox="0 0 24 24" width="36" height="36">
+                                <path fill="currentColor" d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z"/>
+                            </svg>
+                            <span class="upload-title">Select .bin firmware file</span>
+                            <span class="upload-sub" id="selected-file-name">Click to browse</span>
+                        </div>
+
+                        <div class="ota-progress-section">
+                            <div class="progress-texts">
+                                <span class="progress-label">Flash Progress</span>
+                                <span class="progress-percent" id="progress-pct">--</span>
+                            </div>
+                            <div class="progress-bar-bg">
+                                <div class="progress-bar-fill" id="progress-fill" style="width: 0%"></div>
+                            </div>
+                        </div>
+
+                        <button class="btn btn-flash" id="btn-flash" disabled onclick="onFlashFirmware()">FLASH FIRMWARE</button>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+    
+    <script src="app.js"></script>
+</body>
+</html>

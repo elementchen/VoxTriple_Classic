@@ -1,0 +1,705 @@
+/* ==========================================================================
+   Figma 1:1 Pixel-Perfect Light Theme Styles for VoxTriple (KeyMapper)
+   ========================================================================== */
+
+:root {
+    --bg-app: #f4f5f6;
+    --bg-card: #ffffff;
+    --border-color: #eaeaea;
+    --text-primary: #121212;
+    --text-muted: #969696;
+    --text-inactive: #b4b4b8;
+    --accent-orange: #ff6b00;
+    --accent-orange-bg: #fff0e6;
+    --accent-black: #121212;
+    --btn-gray: #f0f0f2;
+    --btn-gray-hover: #e5e5e7;
+    --shadow-soft: 0 8px 30px rgba(0, 0, 0, 0.02), 0 2px 8px rgba(0, 0, 0, 0.02);
+    --shadow-hover: 0 12px 40px rgba(0, 0, 0, 0.04), 0 4px 12px rgba(0, 0, 0, 0.03);
+    --border-radius-lg: 16px;
+    --border-radius-md: 10px;
+    --border-radius-sm: 6px;
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    user-select: none;
+    -webkit-user-drag: none;
+}
+
+body {
+    background-color: var(--bg-app);
+    color: var(--text-primary);
+    width: 100vw;
+    height: 100vh;
+    overflow: hidden;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.app-container {
+    width: 830px;
+    height: 700px;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+/* ── 头部与连接栏 ───────────────────────────────────────────────────────── */
+.app-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+    height: 68px;
+}
+
+/* Logo 卡片 */
+.logo-card {
+    background: var(--bg-card);
+    border-radius: var(--border-radius-lg);
+    padding: 10px 18px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    height: 100%;
+    box-shadow: var(--shadow-soft);
+    border: 1px solid rgba(0, 0, 0, 0.01);
+}
+
+.logo-img {
+    width: 44px;
+    height: 44px;
+    border-radius: 10px;
+    object-fit: contain;
+}
+
+.logo-text {
+    display: flex;
+    flex-direction: column;
+}
+
+.logo-title {
+    font-size: 16px;
+    font-weight: 700;
+    color: #000;
+    letter-spacing: -0.3px;
+}
+
+.logo-version {
+    font-size: 11px;
+    color: var(--text-inactive);
+    font-weight: 500;
+    margin-top: 1px;
+}
+
+/* 连接控制条 */
+.control-panel {
+    flex-grow: 1;
+    background: var(--bg-card);
+    border-radius: var(--border-radius-lg);
+    padding: 0 16px 0 20px;
+    display: flex;
+    align-items: center;
+    height: 100%;
+    box-shadow: var(--shadow-soft);
+    border: 1px solid rgba(0, 0, 0, 0.01);
+}
+
+.status-indicator {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 120px;
+}
+
+.status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+}
+
+.status-dot.connected {
+    background-color: #2ed573;
+    box-shadow: 0 0 10px rgba(46, 213, 115, 0.4);
+}
+
+.status-dot.disconnected {
+    background-color: #a4a4a8;
+}
+
+.status-text {
+    font-size: 13px;
+    font-weight: 600;
+    color: #555;
+}
+
+.divider {
+    width: 1px;
+    height: 28px;
+    background-color: var(--border-color);
+    margin: 0 16px;
+}
+
+.port-section {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.control-label {
+    font-size: 11px;
+    font-weight: 800;
+    color: var(--text-inactive);
+    letter-spacing: 0.8px;
+}
+
+.select-wrapper {
+    position: relative;
+}
+
+select {
+    appearance: none;
+    background: #f4f4f6;
+    border: none;
+    border-radius: var(--border-radius-md);
+    padding: 7px 32px 7px 12px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-primary);
+    cursor: pointer;
+    min-width: 140px;
+    outline: none;
+    transition: background 0.15s;
+}
+
+select:hover {
+    background: #eaeaec;
+}
+
+.select-wrapper::after {
+    content: "";
+    position: absolute;
+    right: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    border: 4px solid transparent;
+    border-top-color: #555;
+    pointer-events: none;
+}
+
+.btn {
+    border: none;
+    border-radius: var(--border-radius-md);
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    outline: none;
+    transition: all 0.15s ease;
+    height: 34px;
+    padding: 0 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.btn-connect {
+    background-color: var(--accent-black);
+    color: #fff;
+    margin-left: 12px;
+    border-radius: 17px; /* Figma Rounded button styling */
+    padding: 0 20px;
+}
+
+.btn-connect:hover {
+    opacity: 0.9;
+    transform: scale(0.98);
+}
+
+.btn-connect.connected-state {
+    background-color: #ff3b30;
+}
+
+.firmware-section {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+}
+
+.firmware-version {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.btn-update-check {
+    background-color: var(--btn-gray);
+    color: #555;
+    margin-left: 12px;
+    font-weight: 700;
+    font-size: 10px;
+    letter-spacing: 0.5px;
+}
+
+.btn-update-check:hover {
+    background-color: var(--btn-gray-hover);
+}
+
+/* ── 核心功能布局 ───────────────────────────────────────────────────────── */
+.main-layout {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    flex-grow: 1;
+}
+
+.section {
+    background: var(--bg-card);
+    border-radius: var(--border-radius-lg);
+    padding: 20px;
+    box-shadow: var(--shadow-soft);
+    border: 1px solid rgba(0, 0, 0, 0.01);
+}
+
+.section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+}
+
+.section-title {
+    font-size: 11px;
+    font-weight: 800;
+    color: var(--text-inactive);
+    letter-spacing: 1px;
+}
+
+.section-tips {
+    font-size: 11px;
+    color: var(--text-inactive);
+    font-weight: 500;
+    letter-spacing: 0.5px;
+}
+
+/* ── 按键网格 ───────────────────────────────────────────────────────────── */
+.key-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+}
+
+.key-card {
+    background: #f8f9fa;
+    border-radius: var(--border-radius-lg);
+    padding: 16px;
+    border: 1px solid #f0f0f2;
+    transition: all 0.2s ease;
+    display: flex;
+    flex-direction: column;
+    height: 220px;
+}
+
+.key-card:hover {
+    box-shadow: 0 4px 16px rgba(0,0,0,0.02);
+    border-color: #e5e5ea;
+}
+
+.key-card.capturing-state {
+    border-color: var(--accent-orange);
+    box-shadow: 0 0 12px rgba(255, 107, 0, 0.1);
+    background: #fffcfb;
+}
+
+.key-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.key-card-title {
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--text-inactive);
+    letter-spacing: 0.5px;
+}
+
+.btn-capture {
+    background-color: var(--accent-black);
+    color: #fff;
+    border: none;
+    border-radius: var(--border-radius-sm);
+    font-size: 9px;
+    font-weight: 800;
+    padding: 5px 10px;
+    cursor: pointer;
+    transition: background 0.15s;
+    letter-spacing: 0.5px;
+}
+
+.btn-capture:hover {
+    opacity: 0.85;
+}
+
+.key-card.capturing-state .btn-capture {
+    background-color: var(--accent-orange);
+}
+
+.key-display {
+    flex-grow: 1;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: 30px;
+    font-weight: 700;
+    color: var(--text-primary);
+    letter-spacing: -0.5px;
+}
+
+.key-card.active-display .key-display {
+    color: var(--accent-orange);
+}
+
+.modifiers-container {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.mods-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 4px;
+}
+
+.mod-pill {
+    flex: 1;
+    text-align: center;
+    background: transparent;
+    color: var(--text-inactive);
+    font-size: 10px;
+    font-weight: 600;
+    padding: 4px 0;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    border: 1px solid transparent;
+}
+
+.mod-pill:hover {
+    color: #666;
+    background-color: #eaeaea;
+}
+
+.mod-pill.active {
+    color: var(--accent-orange);
+    font-weight: 700;
+    background-color: var(--accent-orange-bg);
+}
+
+/* ── 下半区排版 ─────────────────────────────────────────────────────────── */
+.bottom-layout {
+    display: grid;
+    grid-template-columns: 320px 1fr;
+    gap: 16px;
+    height: 310px;
+}
+
+/* 左半：硬件级设置控制面板 */
+.left-settings {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.setting-card {
+    background: var(--bg-card);
+    border-radius: var(--border-radius-lg);
+    padding: 20px;
+    box-shadow: var(--shadow-soft);
+    border: 1px solid rgba(0, 0, 0, 0.01);
+}
+
+.mic-card {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    height: 76px;
+}
+
+.setting-icon-desc {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.setting-svg {
+    color: var(--text-inactive);
+}
+
+.setting-texts {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.setting-name {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.setting-sub {
+    font-size: 10px;
+    color: var(--text-inactive);
+    font-weight: 500;
+}
+
+.power-card-main {
+    flex-grow: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+}
+
+.power-section-header {
+    font-size: 10px;
+    font-weight: 800;
+    color: var(--text-inactive);
+    letter-spacing: 1.2px;
+    margin-bottom: 8px;
+}
+
+.power-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 4px;
+}
+
+.power-row-tx {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 10px;
+}
+
+.tx-text-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.tx-val-badge {
+    font-size: 11px;
+    font-weight: 800;
+    color: var(--accent-orange);
+    letter-spacing: 0.3px;
+}
+
+/* 8格分段条 */
+.power-bar-segments {
+    display: grid;
+    grid-template-columns: repeat(8, 1fr);
+    gap: 5px;
+    height: 8px;
+    margin-top: 4px;
+}
+
+.power-segment {
+    background-color: #e5e5ea;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.power-segment.active {
+    background-color: var(--accent-orange);
+}
+
+.power-segment:hover {
+    transform: scaleY(1.2);
+}
+
+/* ── 橙色 Switch 控件 ────────────────────────────────────────────────────── */
+.switch-toggle {
+    position: relative;
+    display: inline-block;
+    width: 44px;
+    height: 24px;
+}
+
+.switch-toggle input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.switch-slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: #e5e5ea;
+    transition: .25s ease;
+    border-radius: 24px;
+}
+
+.switch-slider:before {
+    position: absolute;
+    content: "";
+    height: 18px;
+    width: 18px;
+    left: 3px;
+    bottom: 3px;
+    background-color: white;
+    transition: .25s ease;
+    border-radius: 50%;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+}
+
+input:checked + .switch-slider {
+    background-color: var(--accent-orange);
+}
+
+input:checked + .switch-slider:before {
+    transform: translateX(20px);
+}
+
+/* ── 右半区: OTA升级 ────────────────────────────────────────────────────────── */
+.right-ota {
+    flex-grow: 1;
+}
+
+.ota-card {
+    height: 100%;
+    background: var(--bg-card);
+    border-radius: var(--border-radius-lg);
+    padding: 20px;
+    box-shadow: var(--shadow-soft);
+    border: 1px solid rgba(0, 0, 0, 0.01);
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+}
+
+.ota-sub-header {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-top: 4px;
+}
+
+.upload-dropzone {
+    border: 1.5px dashed #d1d1d6;
+    background: #fafafb;
+    border-radius: var(--border-radius-md);
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    height: 100px;
+    margin-top: 6px;
+}
+
+.upload-dropzone:hover {
+    border-color: var(--accent-orange);
+    background: #fffcfb;
+}
+
+.upload-svg {
+    color: var(--text-inactive);
+    transition: color 0.2s;
+}
+
+.upload-dropzone:hover .upload-svg {
+    color: var(--accent-orange);
+}
+
+.upload-title {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.upload-sub {
+    font-size: 10px;
+    color: var(--text-inactive);
+    font-weight: 500;
+    text-align: center;
+    max-width: 260px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.ota-progress-section {
+    margin-top: 8px;
+}
+
+.progress-texts {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+}
+
+.progress-label {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.progress-percent {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--text-inactive);
+}
+
+.progress-bar-bg {
+    height: 4px;
+    background-color: #f0f0f2;
+    border-radius: 2px;
+    overflow: hidden;
+}
+
+.progress-bar-fill {
+    height: 100%;
+    background-color: var(--accent-orange);
+    width: 0%;
+    transition: width 0.25s ease-out;
+}
+
+.btn-flash {
+    width: 100%;
+    background-color: #f2f2f7;
+    color: var(--text-inactive);
+    border-radius: var(--border-radius-md);
+    font-weight: 700;
+    height: 40px;
+    margin-top: 8px;
+    letter-spacing: 0.5px;
+}
+
+.btn-flash:not([disabled]) {
+    background-color: var(--accent-orange);
+    color: #fff;
+    box-shadow: 0 4px 12px rgba(255, 107, 0, 0.15);
+}
+
+.btn-flash:not([disabled]):hover {
+    opacity: 0.9;
+    transform: scale(0.99);
+}
