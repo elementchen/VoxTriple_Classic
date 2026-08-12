@@ -109,14 +109,25 @@ class Api:
         return ok
 
     def select_local_bin(self) -> str | None:
-        """Select a local firmware file using Windows native file dialog."""
-        log.info("Opening Windows file selection dialog...")
-        if self._window:
-            file_types = ('Firmware Files (*.bin)', '*.bin')
-            res = self._window.create_file_dialog(webview.OPEN_DIALOG, file_types=file_types)
-            if res and len(res) > 0:
-                log.info(f"User selected file via webview: {res[0]}")
-                return res[0]
+        """Select a local firmware file using Windows native file dialog via Tkinter fallback to ensure non-UI thread safety."""
+        log.info("Opening Windows file selection dialog via Tkinter...")
+        try:
+            import tkinter as tk
+            from tkinter import filedialog
+            root = tk.Tk()
+            root.withdraw()
+            root.attributes("-topmost", True)
+            file_path = filedialog.askopenfilename(
+                title="Select VoxTriple firmware file (.bin)",
+                filetypes=[("Firmware Files (*.bin)", "*.bin"), ("All Files", "*.*")]
+            )
+            root.destroy()
+            if file_path:
+                normalized_path = file_path.replace("\\", "/")
+                log.info(f"User selected file via Tkinter: {normalized_path}")
+                return normalized_path
+        except Exception as e:
+            log.error(f"Tkinter file dialog failed: {e}")
         return None
 
     def trigger_ota(self, bin_path: str) -> bool:
