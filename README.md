@@ -16,7 +16,7 @@
 
 ### 1. 首次拿到开发板？（首次物理初始化）
 如果您是**全新开发板**，或者**刷过别的程序的板子**，请先进行一次物理初始化烧录：
-* **第一步**：下载乐鑫官方的 [ESP32 Flash Download Tool 官方烧录工具](https://www.espressif.com.cn/zh-hans/support/download/other-tools)；
+* **第一步**：下载乐鑫官方的 [ESP32 Flash Download Tool 官方烧录工具](https://docs.espressif.com/projects/esp-test-tools/zh_CN/latest/esp32/production_stage/tools/flash_download_tool.html)；
 * **第二步**：从项目 [GitHub Releases](https://github.com/elementchen/VoxTriple_Classic/releases) 页面，下载最新版本的**「一键合并固件」**（文件名为 **`esp32_bt_mic_merged_vX.X.X.bin`**）；
 * **第三步**：打开烧录工具，导入该 `.bin` 文件，**烧录首偏置地址填 `0x0`**，点击 **`START`** 即可一键刷入。刷入后复位板子，您的系统即已成功运行！
 > 💡 详细的傻瓜图文操作步骤，请点击阅读：[📖 中文新手固件烧录与更新教程](docs/flash_guide_zh.md)
