@@ -164,10 +164,13 @@ class Api:
                 self._window.show_dialog("Error", "Failed to fetch updates from GitHub.\n获取 GitHub 在线更新版本失败，请检查网络！")
 
     def close_window(self):
-        """Close App window, triggered by JS close button."""
-        log.info("Close Window request received from Webview.")
-        if self._window:
-            self._window.destroy()
+        """Safely and immediately terminate the application process to avoid Cocoa thread deadlocks."""
+        log.info("Close Window request received. Terminating safely...")
+        def safe_exit():
+            import time
+            time.sleep(0.1)
+            os._exit(0)
+        threading.Thread(target=safe_exit, daemon=True).start()
 
     # ── Callbacks ─────────────────────────────────────────────────────────
     def _on_button_event(self, btn_id: int, state: int):
@@ -217,8 +220,8 @@ def main():
         url=index_path, 
         js_api=api,
         width=860,
-        height=830,
-        min_size=(830, 800),
+        height=800,
+        min_size=(830, 780),
         resizable=True,
         frameless=True
     )
