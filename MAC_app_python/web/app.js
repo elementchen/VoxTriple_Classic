@@ -1,5 +1,5 @@
 // ==========================================================================
-// VoxTriple Webview Frontend App Logic
+// VoxTriple Webview Frontend App Logic (Figma 1:1 Restored & Aligned)
 // ==========================================================================
 
 // ── Virtual Key Code Map (Physical Keyboard mappings under macOS) ─────────
@@ -115,6 +115,8 @@ async function onConnectClick() {
     if (!window.pywebview || !window.pywebview.api) return;
     
     const btn = document.getElementById("btn-connect");
+    const btnWrite = document.getElementById("btn-write-config");
+    
     if (!isConnected) {
         const portSelect = document.getElementById("port-select");
         const selectedPort = portSelect.value;
@@ -128,6 +130,9 @@ async function onConnectClick() {
             btn.classList.add("connected-state");
             document.getElementById("status-dot").className = "status-dot connected";
             document.getElementById("status-text").textContent = "Connected";
+            
+            // Enable Write Config Button
+            btnWrite.disabled = false;
             
             // Pull configuration cache
             const config = await window.pywebview.api.fetch_config();
@@ -150,11 +155,13 @@ async function onConnectClick() {
         document.getElementById("status-text").textContent = "Disconnected";
         document.getElementById("firmware-ver").textContent = "v--";
         
-        // 条件隐藏升级按钮并重置状态小字
+        // Disable Write Config Button
+        btnWrite.disabled = true;
+        
+        // Hide update trigger button
         const btnUpdate = document.getElementById("btn-update-trigger");
         if (btnUpdate) btnUpdate.style.display = "none";
-        const labelStatus = document.getElementById("firmware-status-label");
-        if (labelStatus) labelStatus.textContent = "";
+        document.getElementById("firmware-status-label").textContent = "";
         
         resetConfigUi();
     }
@@ -174,15 +181,8 @@ function renderConfig(config) {
         
         currentConfigs[i] = { vk, mod };
         
-        // Key Name
-        document.getElementById(`key-display-${i}`).textContent = getFriendlyKeyName(vk);
-        
-        const cardEl = document.getElementById(`key-display-${i}`).parentElement;
-        if (vk > 0) {
-            cardEl.classList.add("active-display");
-        } else {
-            cardEl.classList.remove("active-display");
-        }
+        // Update Key Card visual content (Display combination keys!)
+        updateKeyCardDisplay(i);
         
         // Modifiers
         const pills = document.querySelectorAll(`#mods-${i} .mod-pill`);
@@ -197,11 +197,48 @@ function renderConfig(config) {
     }
 }
 
+// ── Compute and display combination key values (e.g. Cmd + Shift + A) ─────
+function updateKeyCardDisplay(btnIdx) {
+    const config = currentConfigs[btnIdx];
+    const displayEl = document.getElementById(`key-display-${btnIdx}`);
+    const cardEl = document.getElementById(`key-card-${btnIdx}`);
+    
+    if (config.vk === 0) {
+        displayEl.textContent = "--";
+        cardEl.classList.remove("active-display");
+        return;
+    }
+    
+    cardEl.classList.add("active-display");
+    
+    const parts = [];
+    const mod = config.mod;
+    const modNames = [
+        { mask: 0x01, name: "Ctrl" }, { mask: 0x02, name: "Shift" }, 
+        { mask: 0x04, name: "Alt" }, { mask: 0x08, name: "Cmd" },
+        { mask: 0x10, name: "Ctrl" }, { mask: 0x20, name: "Shift" }, 
+        { mask: 0x40, name: "Alt" }, { mask: 0x80, name: "Cmd" }
+    ];
+    
+    // De-duplicate same modifiers across left/right
+    const seenMods = new Set();
+    modNames.forEach(m => {
+        if ((mod & m.mask) > 0) {
+            seenMods.add(m.name);
+        }
+    });
+    
+    seenMods.forEach(name => parts.push(name));
+    parts.push(getFriendlyKeyName(config.vk));
+    
+    displayEl.textContent = parts.join(" + ");
+}
+
 function resetConfigUi() {
     for (let i = 0; i < 4; i++) {
         document.getElementById(`key-display-${i}`).textContent = "--";
-        const cardEl = document.getElementById(`key-display-${i}`).parentElement;
-        cardEl.classList.remove("active-display");
+        const cardEl = document.getElementById(`key-card-${i}`);
+        if (cardEl) cardEl.classList.remove("active-display");
         const pills = document.querySelectorAll(`#mods-${i} .mod-pill`);
         pills.forEach(pill => pill.classList.remove("active"));
     }
@@ -219,7 +256,7 @@ function getFriendlyKeyName(vk) {
     return `VK_${vk.toString(16).toUpperCase()}`;
 }
 
-// ── Toggle Modifier ──────────────────────────────────────────────────────
+// ── Click Toggle Modifier (Local only, write on SAVE CONFIG) ─────────────
 async function toggleMod(btnIdx, mask) {
     if (!isConnected) return;
     
@@ -234,7 +271,8 @@ async function toggleMod(btnIdx, mask) {
         currentConfigs[btnIdx].mod |= mask;
     }
     
-    saveAllConfigsToDevice();
+    // Update main text dynamically in real time!
+    updateKeyCardDisplay(btnIdx);
 }
 
 // ── TX Power UX ──────────────────────────────────────────────────────────
@@ -255,23 +293,25 @@ function setTxPowerUi(level) {
 async function setTxPower(level) {
     if (!isConnected) return;
     setTxPowerUi(level);
-    saveAllConfigsToDevice();
 }
 
-// ── Mic & Sleep Toggles ──────────────────────────────────────────────────
+// ── Mic & Sleep Toggles (Local only) ─────────────────────────────────────
 function onMicToggle() {
-    if (!isConnected) return;
-    saveAllConfigsToDevice();
+    // Only local state change, written on Save Config click
 }
 
 function onSleepToggle() {
-    if (!isConnected) return;
-    saveAllConfigsToDevice();
+    // Only local state change, written on Save Config click
 }
 
-// ── Write parameters to physical board flash ─────────────────────────────
+// ── Write parameters to physical board flash (Save Config Button click) ──
 async function saveAllConfigsToDevice() {
-    if (!window.pywebview || !window.pywebview.api) return;
+    if (!isConnected || !window.pywebview || !window.pywebview.api) return;
+    
+    const btnWrite = document.getElementById("btn-write-config");
+    const origText = btnWrite.textContent;
+    btnWrite.disabled = true;
+    btnWrite.textContent = "WRITING...";
     
     const mic = document.getElementById("mic-toggle").checked ? 1 : 0;
     const sleep = document.getElementById("sleep-toggle").checked ? 1 : 0;
@@ -279,12 +319,21 @@ async function saveAllConfigsToDevice() {
     const activeSegments = document.querySelectorAll("#tx-power-bar .power-segment.active");
     const tx = Math.max(0, activeSegments.length - 1);
     
-    await window.pywebview.api.write_config(
+    const ok = await window.pywebview.api.write_config(
         currentConfigs, 
         tx, 
         sleep, 
         mic
     );
+    
+    btnWrite.disabled = false;
+    btnWrite.textContent = origText;
+    
+    if (ok) {
+        alert("Configuration saved successfully to device flash!\n配置写入开发板成功！");
+    } else {
+        alert("Configuration save failed, please check connection.\n配置写入失败，请检查连接状态！");
+    }
 }
 
 // ── Capture physical key sequence (Native JS) ────────────────────────────
@@ -326,23 +375,15 @@ function onCapturedKeydown(e) {
         
         const card = document.getElementById(`key-card-${btnIdx}`);
         const btn = document.getElementById(`btn-capture-${btnIdx}`);
-        const display = document.getElementById(`key-display-${btnIdx}`);
         
         card.classList.remove("capturing-state");
         btn.textContent = "CAPTURE";
         
         // Save current key VK
         currentConfigs[btnIdx].vk = vk;
-        display.textContent = getFriendlyKeyName(vk);
         
-        if (vk > 0) {
-            card.classList.add("active-display");
-        } else {
-            card.classList.remove("active-display");
-        }
-        
-        // Automatically save to hardware
-        saveAllConfigsToDevice();
+        // Update main text dynamically in real time!
+        updateKeyCardDisplay(btnIdx);
     } else {
         alert(`Unsupported key code: ${code}\n不支持该按键码配置！`);
     }
@@ -387,7 +428,6 @@ async function onFlashFirmware() {
         progressFill.style.width = "100%";
         progressPct.textContent = "100% Completed";
     } else {
-        // Fallback alert but tell user it might have successfully flashed if rebooted
         alert("OTA 写入完成，设备正在执行校验与重启。若重启后正常加载，即代表升级成功！");
         btnFlash.textContent = "FLASH FIRMWARE";
         btnFlash.disabled = false;

@@ -305,6 +305,29 @@ select:hover {
     background-color: #ff3b30;
 }
 
+.btn-write-config {
+    background-color: #2ed573;
+    color: #ffffff;
+    box-shadow: 0 4px 12px rgba(46, 213, 115, 0.2);
+    border-radius: 16px;
+    padding: 0 20px;
+    margin-left: 12px;
+    font-weight: 750;
+    height: 32px;
+}
+
+.btn-write-config:not([disabled]):hover {
+    opacity: 0.9;
+    transform: scale(0.98);
+}
+
+.btn-write-config[disabled] {
+    background-color: var(--btn-gray);
+    color: var(--text-inactive);
+    box-shadow: none;
+    cursor: not-allowed;
+}
+
 .firmware-section {
     display: flex;
     flex-direction: column;
