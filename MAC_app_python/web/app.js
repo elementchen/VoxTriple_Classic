@@ -45,7 +45,6 @@ let currentConfigs = [
     { vk: 0, mod: 0 },
     { vk: 0, mod: 0 }
 ];
-let selectedOtaPath = "";
 let isConnected = false;
 let capturingIdx = -1;
 
@@ -170,6 +169,10 @@ async function onConnectClick() {
         // 隐藏固件版本信息区块
         const fwSection = document.getElementById("firmware-section");
         if (fwSection) fwSection.style.display = "none";
+        
+        // 隐藏并折叠右侧 OTA 升级卡片，恢复左侧全宽
+        const layout = document.querySelector(".bottom-layout");
+        if (layout) layout.classList.add("ota-hidden");
         
         resetConfigUi();
     }
@@ -355,7 +358,7 @@ function startKeyCapture(btnIdx) {
         return;
     }
     
-    if (capturingIdx !== -1) return; // Already capturing
+        if (capturingIdx !== -1) return; // Already capturing
     
     capturingIdx = btnIdx;
     
@@ -401,52 +404,50 @@ function onCapturedKeydown(e) {
     }
 }
 
-// ── Manual / Drag-Drop OTA Upload ────────────────────────────────────────
-async function onBrowseFirmware() {
-    if (!window.pywebview || !window.pywebview.api) return;
+// ── Local BIN & Cloud OTA Upgrade Actions ───────────────────────────────
+async function onLocalBinUpgrade() {
+    if (!window.pywebview || !window.pywebview.api || !isConnected) return;
     
+    // 弹窗选取本地 bin 文件
     const filePath = await window.pywebview.api.select_local_bin();
-    if (filePath) {
-        selectedOtaPath = filePath;
-        const name = filePath.split("/").pop();
-        updateOtaSelectedFile(name);
-    }
-}
-
-function updateOtaSelectedFile(filename) {
-    document.getElementById("selected-file-name").textContent = filename;
-    document.getElementById("selected-file-name").style.color = "var(--accent-orange)";
-    document.getElementById("btn-flash").disabled = false;
-}
-
-async function onFlashFirmware() {
-    if (!selectedOtaPath || !isConnected) return;
-    
-    const btnFlash = document.getElementById("btn-flash");
-    btnFlash.disabled = true;
-    btnFlash.textContent = "FLASHING...";
+    if (!filePath) return;
     
     const progressFill = document.getElementById("progress-fill");
     const progressPct = document.getElementById("progress-pct");
+    if (progressFill) progressFill.style.width = "0%";
+    if (progressPct) progressPct.textContent = "Connecting to write local BIN...";
     
-    progressFill.style.width = "0%";
-    progressPct.textContent = "Flashing: 0.0%";
-    
-    const ok = await window.pywebview.api.trigger_ota(selectedOtaPath);
+    // 直接执行固件烧录，无需用户二次点击确认
+    const ok = await window.pywebview.api.trigger_ota(filePath);
     
     if (ok) {
-        alert("OTA Upgrade Completed Successfully! The device is now rebooting.\n固件升级成功！开发板正在重启，请稍候。");
-        btnFlash.textContent = "FLASH FIRMWARE";
-        progressFill.style.width = "100%";
-        progressPct.textContent = "100% Completed";
+        alert("OTA Upgrade Completed Successfully! The device is now rebooting.\n固件本地升级成功！开发板正在重启生效。");
+        if (progressFill) progressFill.style.width = "100%";
+        if (progressPct) progressPct.textContent = "100% Completed";
     } else {
         alert("OTA 写入完成，设备正在执行校验与重启。若重启后正常加载，即代表升级成功！");
-        btnFlash.textContent = "FLASH FIRMWARE";
-        btnFlash.disabled = false;
     }
 }
 
-// ── Smart Cloud Check & Auto Update (100% 还原老稳定版本交互) ────────────
+async function onCloudBinUpgrade() {
+    if (!window.pywebview || !window.pywebview.api || !isConnected) return;
+    
+    if (!confirm("确定要立即从 GitHub 下载该固件并直接刷写吗？\n(升级期间请保持有线连接且不要断电)")) {
+        return;
+    }
+    
+    const progressFill = document.getElementById("progress-fill");
+    const progressPct = document.getElementById("progress-pct");
+    if (progressFill) progressFill.style.width = "0%";
+    if (progressPct) progressPct.textContent = "Downloading cloud firmware...";
+    
+    const ok = await window.pywebview.api.start_smart_update();
+    if (!ok) {
+        alert("启动云端在线升级失败，请检查网络或串口连接！");
+    }
+}
+
+// ── Smart Cloud Check (自动检验机制) ──────────────────────────────────────────
 async function postConnectUpdateCheck() {
     if (!window.pywebview || !window.pywebview.api) return;
     
@@ -481,57 +482,53 @@ async function postConnectUpdateCheck() {
     }
 }
 
-async function triggerSmartUpdate() {
-    if (!window.pywebview || !window.pywebview.api) return;
-    
-    if (!confirm("确定要立即从 GitHub 自动下载并刷写最新固件吗？\n(升级期间请保持有线连接且不要断电)")) {
-        return;
+// 点击顶部 UPDATE 按钮，平滑拉开右侧 OTA 固件卡片面版
+function triggerSmartUpdate() {
+    // 展开右下侧 OTA 区域，左下侧自动压缩至 320px 宽度
+    const layout = document.querySelector(".bottom-layout");
+    if (layout) {
+        layout.classList.remove("ota-hidden");
     }
-    
-    const btnUpdate = document.getElementById("btn-update-trigger");
-    btnUpdate.disabled = true;
-    btnUpdate.textContent = "UPGRADING...";
     
     const progressFill = document.getElementById("progress-fill");
     const progressPct = document.getElementById("progress-pct");
-    progressFill.style.width = "0%";
-    progressPct.textContent = "Downloading: 0%";
-    
-    const ok = await window.pywebview.api.start_smart_update();
-    if (!ok) {
-        alert("启动在线升级失败，请检查网络或串口！");
-        btnUpdate.disabled = false;
-        btnUpdate.textContent = "UPDATE";
-    }
+    if (progressFill) progressFill.style.width = "0%";
+    if (progressPct) progressPct.textContent = "OTA Upgrade Activated / OTA 更新已唤出";
 }
 
 function onSmartUpdateComplete(success) {
     const btnUpdate = document.getElementById("btn-update-trigger");
-    btnUpdate.disabled = false;
+    if (btnUpdate) btnUpdate.disabled = false;
     
     const progressFill = document.getElementById("progress-fill");
     const progressPct = document.getElementById("progress-pct");
     const labelStatus = document.getElementById("firmware-status-label");
     
     if (success) {
-        progressFill.style.width = "100%";
-        progressPct.textContent = "100% Completed";
+        if (progressFill) progressFill.style.width = "100%";
+        if (progressPct) progressPct.textContent = "100% Completed";
         alert("固件在线升级成功！开发板正在重启生效。");
-        btnUpdate.style.display = "none";
-        labelStatus.textContent = "(已经是最新版)";
-        labelStatus.style.color = "#2ed573";
+        if (btnUpdate) btnUpdate.style.display = "none";
+        if (labelStatus) {
+            labelStatus.textContent = "(已经是最新版)";
+            labelStatus.style.color = "#2ed573";
+        }
     } else {
         alert("在线升级成功！开发板正在重启引导，请等待片刻后重新连接。");
-        btnUpdate.style.display = "none";
-        labelStatus.textContent = "(已经是最新版)";
-        labelStatus.style.color = "#2ed573";
+        if (btnUpdate) btnUpdate.style.display = "none";
+        if (labelStatus) {
+            labelStatus.textContent = "(已经是最新版)";
+            labelStatus.style.color = "#2ed573";
+        }
     }
 }
 
 function onSmartUpdateError(reason) {
     const btnUpdate = document.getElementById("btn-update-trigger");
-    btnUpdate.disabled = false;
-    btnUpdate.textContent = "UPDATE";
+    if (btnUpdate) {
+        btnUpdate.disabled = false;
+        btnUpdate.textContent = "UPDATE";
+    }
     alert(`在线固件升级失败！\n原因: ${reason}`);
 }
 
