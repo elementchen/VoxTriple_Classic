@@ -21,7 +21,11 @@ const JS_CODE_TO_VK = {
     "Semicolon": 0xBA, "Comma": 0xBC, "Period": 0xBE, "Slash": 0xBF,
     "Minus": 0xBD, "Equal": 0xBB, "BracketLeft": 0xDB, "BracketRight": 0xDD,
     "Backslash": 0xDC, "Quote": 0xDE, "Backquote": 0xC0,
-    "ScrollLock": 0x91, "NumLock": 0x90, "Pause": 0x13
+    "ScrollLock": 0x91, "NumLock": 0x90, "Pause": 0x13,
+    "ShiftLeft": 0xA0, "ShiftRight": 0xA1,
+    "ControlLeft": 0xA2, "ControlRight": 0xA3,
+    "AltLeft": 0xA4, "AltRight": 0xA5,
+    "MetaLeft": 0x5B, "MetaRight": 0x5C
 };
 
 const VK_TO_NAME = {
@@ -35,7 +39,11 @@ const VK_TO_NAME = {
     0x82: "F19", 0x83: "F20", 0x84: "F21", 0x85: "F22", 0x86: "F23", 0x87: "F24",
     0xBA: ";", 0xBC: ",", 0xBE: ".", 0xBF: "/", 0xBD: "-", 0xBB: "=",
     0xDB: "[", 0xDD: "]", 0xDC: "\\", 0xDE: "'", 0xC0: "`",
-    0x91: "SCROLL", 0x90: "NumLock", 0x13: "Pause"
+    0x91: "SCROLL", 0x90: "NumLock", 0x13: "Pause",
+    0xA0: "LShift", 0xA1: "RShift",
+    0xA2: "LCtrl", 0xA3: "RCtrl",
+    0xA4: "LOption", 0xA5: "ROption",
+    0x5B: "LCmd", 0x5C: "RCmd"
 };
 
 // ── Global App State ──────────────────────────────────────────────────────
