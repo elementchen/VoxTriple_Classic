@@ -89,6 +89,8 @@ class Api:
             "tx_power": self.spp._config_cache.get("tx_power", 4),
             "sleep_mode": self.spp._config_cache.get("sleep_mode", 1),
             "mic_enabled": self.spp._config_cache.get("mic_enabled", 1),
+            "board_model": self.spp._config_cache.get("board_model", 0),
+            "board_name": self.spp._config_cache.get("board_name", "WEMOS 18650"),
             "mappings": []
         }
         for i in range(4):
@@ -105,6 +107,15 @@ class Api:
             
         log.info(f"Save parameters: mapping={mappings}, tx={tx}, sleep={sleep}, mic={mic}")
         future = run_coro(self.spp.set_config(mappings, tx, sleep, mic))
+        ok = future.result(timeout=5.0)
+        return ok
+
+    def set_board_model(self, model: int) -> bool:
+        """Set board hardware model on device and trigger restart."""
+        if not self._connected:
+            return False
+        log.info(f"Set board hardware model: {model}")
+        future = run_coro(self.spp.write_board_model(model))
         ok = future.result(timeout=5.0)
         return ok
 
@@ -254,7 +265,7 @@ class Api:
             req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
             with urllib.request.urlopen(req, timeout=4.0) as resp:
                 data = json.loads(resp.read().decode("utf-8"))
-                tag = data.get("tag_name", "v1.0.13").strip()
+                tag = data.get("tag_name", "v1.0.14").strip()
                 if tag.startswith("v"):
                     tag = tag[1:]
                 self._github_version = tag

@@ -58,6 +58,7 @@ let currentConfigs = [
 let selectedOtaPath = "";
 let isConnected = false;
 let capturingIdx = -1;
+let currentBoardModel = 0;
 
 // ── Dom Initialization ───────────────────────────────────────────────────
 document.addEventListener("DOMContentLoaded", () => {
@@ -181,6 +182,14 @@ async function onConnectClick() {
         const fwSection = document.getElementById("firmware-section");
         if (fwSection) fwSection.style.display = "none";
         
+        // 隐藏开发板型号信息区块
+        const boardDivider = document.getElementById("board-divider");
+        if (boardDivider) boardDivider.style.display = "none";
+        const boardSection = document.getElementById("board-section");
+        if (boardSection) boardSection.style.display = "none";
+        const btnBoardSwitch = document.getElementById("btn-board-switch");
+        if (btnBoardSwitch) btnBoardSwitch.style.display = "none";
+        
         resetConfigUi();
     }
 }
@@ -191,6 +200,21 @@ function renderConfig(config) {
     document.getElementById("mic-toggle").checked = (config.mic_enabled === 1);
     document.getElementById("sleep-toggle").checked = (config.sleep_mode === 1);
     
+    // 更新开发板型号
+    if (config.board_model !== undefined) {
+        currentBoardModel = config.board_model;
+        const boardSelect = document.getElementById("board-select");
+        if (boardSelect) {
+            boardSelect.value = String(config.board_model);
+        }
+    }
+    const boardDivider = document.getElementById("board-divider");
+    if (boardDivider) boardDivider.style.display = "block";
+    const boardSection = document.getElementById("board-section");
+    if (boardSection) boardSection.style.display = "flex";
+    const btnBoardSwitch = document.getElementById("btn-board-switch");
+    if (btnBoardSwitch) btnBoardSwitch.style.display = "none";
+
     setTxPowerUi(config.tx_power !== undefined ? config.tx_power : 4);
     
     for (let i = 0; i < 4; i++) {
@@ -606,5 +630,65 @@ function onPhysicalButtonEvent(btnId, state) {
         setTimeout(() => {
             monitorVal.style.transform = "scale(1)";
         }, 150);
+    }
+}
+
+// ── 开发板型号选择与切换交互 ───────────────────────────────────────────────
+function onBoardSelectChange() {
+    const select = document.getElementById("board-select");
+    const btnSwitch = document.getElementById("btn-board-switch");
+    if (!select || !btnSwitch) return;
+    
+    const selectedModel = parseInt(select.value);
+    if (selectedModel !== currentBoardModel) {
+        btnSwitch.style.display = "block";
+    } else {
+        btnSwitch.style.display = "none";
+    }
+}
+
+async function applyBoardSwitch() {
+    if (!window.pywebview || !window.pywebview.api) return;
+    const select = document.getElementById("board-select");
+    const newModel = parseInt(select.value);
+    const modelNames = {
+        0: "WEMOS 18650",
+        1: "ESP32 Lite V1.0.0"
+    };
+    const targetName = modelNames[newModel] || `Model ${newModel}`;
+    
+    const confirmed = confirm(`确认将设备型号切换为 [${targetName}]？\n\n设备将写入配置并自动重启，生效后请重新点击 CONNECT 连接。`);
+    if (!confirmed) {
+        select.value = String(currentBoardModel);
+        document.getElementById("btn-board-switch").style.display = "none";
+        return;
+    }
+    
+    const btnSwitch = document.getElementById("btn-board-switch");
+    btnSwitch.disabled = true;
+    btnSwitch.textContent = "SAVING...";
+    
+    try {
+        const res = await window.pywebview.api.set_board_model(newModel);
+        btnSwitch.disabled = false;
+        btnSwitch.textContent = "APPLY";
+        btnSwitch.style.display = "none";
+        
+        if (res && res.success) {
+            currentBoardModel = newModel;
+            alert(`开发板型号已成功更新为 [${targetName}]！\n设备正在重启，请等待几秒后重新点击 CONNECT 连接。`);
+            // 主动断开当前连接
+            if (isConnected) {
+                onConnectClick();
+            }
+        } else {
+            alert("切换失败: " + (res ? res.message : "未知错误"));
+            select.value = String(currentBoardModel);
+        }
+    } catch (e) {
+        btnSwitch.disabled = false;
+        btnSwitch.textContent = "APPLY";
+        alert("执行切换发生异常: " + e.message);
+        select.value = String(currentBoardModel);
     }
 }

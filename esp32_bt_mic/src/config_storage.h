@@ -24,6 +24,7 @@
 #define NVS_KEY_MIC_ENABLED "mic_enabled"
 #define NVS_KEY_TX_POWER   "tx_power"
 #define NVS_KEY_OTA_READY   "ota_ready"
+#define NVS_KEY_BOARD_MODEL "hw_model"
 
 /**
  * @brief Initialize NVS configuration storage
@@ -109,5 +110,8 @@ esp_err_t config_storage_clear_all(void);
 
 esp_err_t config_storage_save_ota_ready(uint8_t ready);
 esp_err_t config_storage_load_ota_ready(uint8_t *ready);
+
+esp_err_t config_storage_save_board_model(uint8_t model);
+esp_err_t config_storage_load_board_model(uint8_t *model);
 
 #endif /* __CONFIG_STORAGE_H__ */

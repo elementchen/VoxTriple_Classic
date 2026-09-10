@@ -1,0 +1,58 @@
+VoxTriple v1.6 — ESP32 Lite V1.0.0 接线图
+============================================
+适用硬件：ESP32 Lite V1.0.0 (LOLIN32 Lite 兼容版)
+核心特点：轻量化设计，左侧麦克风连续插排，右侧统一按键，板载LED位于GPIO22
+
+1. INMP441 数字麦克风 → ESP32 Lite V1 (全部集中于左侧排针，极佳抗干扰):
+   VDD  → 3V3          左侧排 Pin 2  (供电，必须接 3.3V，严禁接 5V！)
+   GND  → GND          左侧排 Pin 4  (供电接地)
+   L/R  → GND          左侧排 Pin 4  (声道选择，接地为左声道)
+   SD   → GPIO 25      左侧排 Pin 9  (I2S 串行数据输入 / DATA)
+   WS   → GPIO 26      左侧排 Pin 10 (I2S 声道字选时钟 / LRCLK)
+   SCK  → GPIO 27      左侧排 Pin 11 (I2S 位时钟 / BCLK)
+
+   *布线说明*：3V3、GND、GPIO 25、GPIO 26、GPIO 27 在左侧排针上紧密相邻，
+   可直接使用排插连线，杜绝横跨开发板的飞线，极大降低音频杂音！
+
+2. 物理按键 (全部集中于右侧排针，与老版 18650 开发板引脚 100% 相同):
+   Button 1 → GPIO 4   右侧排 Pin 9  (语音 PTT 键 / Deep Sleep 唤醒键，RTC IO 10)
+   Button 2 → GPIO 18  右侧排 Pin 5  (快捷键 2)
+   Button 3 → GPIO 19  右侧排 Pin 3  (快捷键 3)
+   Button 4 → GPIO 23  右侧排 Pin 4  (快捷键 4)
+   所有按键公共端 → GND (右侧排 Pin 1 或 Pin 14)
+
+   *按键说明*：按键按下时接地（低电平有效），由 ESP32 内部上拉电阻维持高电平。
+
+3. 板载指示灯 LED:
+   - 物理固化在 GPIO 22 (右侧排 Pin 2) 上，无需任何外挂杜邦线或电阻！
+   - 低电平点亮（Active Low），高电平熄灭。
+   - 软件全自动控制（按下 Button 1 时点亮指示，松开时熄灭；休眠与唤醒双闪反馈）。
+
+4. 电池供电与充放电:
+   - 板载 JST-PH 2.0mm 锂电池插座（或排针 BAT 引脚），支持 3.7V 聚合物锂电池。
+   - 板载 TP4054 充电芯片，插入 USB 时自动充电并指示。
+
+5. ESP32 Lite V1.0.0 完整排针速查表:
+   ------------------------------------------------------------
+   左侧排针 (JP1 从上到下):        右侧排针 (JP2 从上到下):
+   Pin 1:  5V (VBUS USB输入)       Pin 1:  GND
+   Pin 2:  3V3  ← INMP441 VDD      Pin 2:  GPIO 22 ← 板载贴片 LED (内部固化)
+   Pin 3:  EN / RST (复位按键)      Pin 3:  GPIO 19 ← Button 3
+   Pin 4:  GND  ← 麦克风接地       Pin 4:  GPIO 23 ← Button 4
+   Pin 5:  GPIO 34 (纯输入)        Pin 5:  GPIO 18 ← Button 2
+   Pin 6:  GPIO 35 (纯输入)        Pin 6:  GPIO 5  (保留)
+   Pin 7:  GPIO 32 (保留)          Pin 7:  GPIO 17 (保留)
+   Pin 8:  GPIO 33 (保留)          Pin 8:  GPIO 16 (空闲可用)
+   Pin 9:  GPIO 25 ← INMP441 SD    Pin 9:  GPIO 4  ← Button 1 (语音PTT/唤醒)
+   Pin 10: GPIO 26 ← INMP441 WS    Pin 10: GPIO 0  (BOOT下载模式引脚，避开)
+   Pin 11: GPIO 27 ← INMP441 SCK   Pin 11: GPIO 2  (Strapping引脚，避开)
+   Pin 12: GPIO 14 (保留)          Pin 12: GPIO 15 (保留)
+   Pin 13: GPIO 12 (MTDI，避开)    Pin 13: GPIO 13 (保留)
+   Pin 14: GND                     Pin 14: BAT (单节锂电池输入正极)
+   ------------------------------------------------------------
+
+6. 注意事项与避坑指南:
+   - INMP441 供电绝不能接 5V，必须接 3.3V！
+   - GPIO 12 是芯片内部闪存供电 Strapping Pin，严禁外加上拉电阻，否则导致上电变砖。
+   - GPIO 21 在 ESP32 Lite V1.0.0 排针上未引出，因此麦克风位时钟已迁移至 GPIO 27。
+   - 原版 18650 开发板的板载 LED 为 GPIO 16，而本开发板为 GPIO 22，固件已通过板级抽象自动适配。

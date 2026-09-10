@@ -10,6 +10,7 @@ idf_component_register(SRCS "main.c"
                             "classic_hidd.c"
                             "config_cmd.c"
                             "uart_console.c"
+                            "board_profile.c"
                     PRIV_REQUIRES bt nvs_flash driver esp_ringbuf led_strip
                                  esp_hid json app_update
                     INCLUDE_DIRS "."

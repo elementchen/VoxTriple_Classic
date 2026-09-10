@@ -14,6 +14,7 @@
 #include "driver/i2s.h"
 #include "esp_log.h"
 #include "audio_capture.h"
+#include "board_profile.h"
 
 static const char *TAG = "AUDIO_CAPTURE";
 
@@ -28,6 +29,11 @@ esp_err_t audio_capture_init(void)
     }
 
     ESP_LOGI(TAG, "Initializing I2S (legacy driver) for INMP441");
+
+    const board_profile_t *profile = board_profile_get_current();
+    gpio_num_t bck_pin = profile ? profile->i2s_bck_gpio : CONFIG_I2S_MIC_BCK_PIN;
+    gpio_num_t ws_pin = profile ? profile->i2s_ws_gpio : CONFIG_I2S_MIC_WS_PIN;
+    gpio_num_t data_pin = profile ? profile->i2s_data_gpio : CONFIG_I2S_MIC_DATA_PIN;
 
     i2s_config_t i2s_cfg = {
         .mode = I2S_MODE_MASTER | I2S_MODE_RX,
@@ -44,10 +50,10 @@ esp_err_t audio_capture_init(void)
     };
 
     i2s_pin_config_t pin_cfg = {
-        .bck_io_num = CONFIG_I2S_MIC_BCK_PIN,
-        .ws_io_num  = CONFIG_I2S_MIC_WS_PIN,
+        .bck_io_num = bck_pin,
+        .ws_io_num  = ws_pin,
         .data_out_num = I2S_PIN_NO_CHANGE,
-        .data_in_num  = CONFIG_I2S_MIC_DATA_PIN,
+        .data_in_num  = data_pin,
     };
 
     esp_err_t ret = i2s_driver_install(I2S_NUM_0, &i2s_cfg, 0, NULL);
@@ -65,9 +71,10 @@ esp_err_t audio_capture_init(void)
     i2s_zero_dma_buffer(I2S_NUM_0);
 
     s_initialized = true;
-    ESP_LOGI(TAG, "I2S ready: %dHz, bck=%d, ws=%d, din=%d",
+    ESP_LOGI(TAG, "I2S ready: %dHz, bck=%d, ws=%d, din=%d (board: %s)",
              I2S_SAMPLE_RATE,
-             CONFIG_I2S_MIC_BCK_PIN, CONFIG_I2S_MIC_WS_PIN, CONFIG_I2S_MIC_DATA_PIN);
+             bck_pin, ws_pin, data_pin,
+             profile ? profile->model_name : "default");
     return ESP_OK;
 }
 

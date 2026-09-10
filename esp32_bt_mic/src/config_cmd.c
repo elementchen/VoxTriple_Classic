@@ -11,6 +11,7 @@
 #include "esp_system.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "board_profile.h"
 
 #define TAG "CONFIG_CMD"
 
@@ -44,12 +45,18 @@ void execute_config_cmd(const char *cmd_line, size_t len, cmd_respond_cb_t respo
             uint8_t mic_enabled = 1;
             config_storage_load_mic_enabled(&mic_enabled);
             
+            const board_profile_t *profile = board_profile_get_current();
+            uint8_t board_model = profile ? (uint8_t)profile->model : 0;
+            const char *board_name = profile ? profile->model_name : "WEMOS 18650";
+
             const esp_app_desc_t *app_desc = esp_app_get_description();
-            char resp[360];
+            char resp[450];
             snprintf(resp, sizeof(resp), 
                      "{\"status\":\"ok\",\"version\":\"%s\",\"btn1_vk\":%d,\"btn1_mod\":%d,\"btn2_vk\":%d,\"btn2_mod\":%d,"
-                     "\"btn3_vk\":%d,\"btn3_mod\":%d,\"btn4_vk\":%d,\"btn4_mod\":%d,\"tx_power\":%d,\"sleep_mode\":%d,\"mic_enabled\":%d}\n",
-                     app_desc->version, vk1, mod1, vk2, mod2, vk3, mod3, vk4, mod4, tx_power, sleep_mode, mic_enabled);
+                     "\"btn3_vk\":%d,\"btn3_mod\":%d,\"btn4_vk\":%d,\"btn4_mod\":%d,\"tx_power\":%d,\"sleep_mode\":%d,\"mic_enabled\":%d,"
+                     "\"board_model\":%d,\"board_name\":\"%s\"}\n",
+                     app_desc->version, vk1, mod1, vk2, mod2, vk3, mod3, vk4, mod4, tx_power, sleep_mode, mic_enabled,
+                     board_model, board_name);
             respond_cb(resp, strlen(resp));
             
         } else if (strcmp(cmd, "set_btn") == 0) {
@@ -98,6 +105,23 @@ void execute_config_cmd(const char *cmd_line, size_t len, cmd_respond_cb_t respo
                 ESP_LOGI(TAG, "Mic enabled status updated to %d. Resetting system in 1 second...", enabled);
                 vTaskDelay(pdMS_TO_TICKS(1000));
                 esp_restart();
+            }
+        } else if (strcmp(cmd, "set_board_model") == 0) {
+            cJSON *model_item = cJSON_GetObjectItem(root, "model");
+            if (model_item && cJSON_IsNumber(model_item)) {
+                uint8_t model = model_item->valueint;
+                if (model < BOARD_MODEL_MAX) {
+                    board_profile_set_model((board_model_t)model);
+                    const char *resp = "{\"status\":\"ok\"}\n";
+                    respond_cb(resp, strlen(resp));
+                    
+                    ESP_LOGI(TAG, "Board model updated to %d. Rebooting in 1 second...", model);
+                    vTaskDelay(pdMS_TO_TICKS(1000));
+                    esp_restart();
+                } else {
+                    const char *resp = "{\"status\":\"error\",\"reason\":\"invalid_model\"}\n";
+                    respond_cb(resp, strlen(resp));
+                }
             }
         } else if (strcmp(cmd, "ota_start") == 0) {
             cJSON *size_item = cJSON_GetObjectItem(root, "size");

@@ -33,7 +33,9 @@ static const char *TAG = "BTN_HANDLER";
 #define BUTTON_TASK_STACK    4096
 #define BUTTON_TASK_PRIORITY 3
 
-#define INDICATOR_LED_GPIO   GPIO_NUM_16
+#include "board_profile.h"
+
+static gpio_num_t s_indicator_led_gpio = GPIO_NUM_16;
 #define INACTIVITY_MS        (30 * 60 * 1000)  /* 30 min deep sleep timeout */
 
 static TimerHandle_t s_inactivity_timer = NULL;
@@ -137,7 +139,7 @@ static void get_button_mapping(uint8_t button_id, uint8_t *vk_code, uint8_t *mod
     }
 }
 
-static const gpio_num_t s_button_pins[BUTTON_NUM] = {
+static gpio_num_t s_button_pins[BUTTON_NUM] = {
     CONFIG_BUTTON_1_GPIO,
     CONFIG_BUTTON_2_GPIO,
     CONFIG_BUTTON_3_GPIO,
@@ -158,24 +160,19 @@ static bool s_btn_task_running = false;
  */
 static void button_task_func(void *arg)
 {
-    btn_state_t state[BUTTON_NUM];
-    uint32_t press_time[BUTTON_NUM];
-    uint32_t last_change[BUTTON_NUM];
-    uint32_t now;
-
-    memset(state, 0, sizeof(state));
-    memset(press_time, 0, sizeof(press_time));
-    memset(last_change, 0, sizeof(last_change));
+    btn_state_t state[BUTTON_NUM] = {BTN_STATE_IDLE};
+    uint32_t last_change[BUTTON_NUM] = {0};
+    uint32_t press_time[BUTTON_NUM] = {0};
 
     ESP_LOGI(TAG, "Button task started (GPIOs: %d, %d, %d, %d)",
              s_button_pins[0], s_button_pins[1], s_button_pins[2], s_button_pins[3]);
 
     while (s_btn_task_running) {
-        now = xTaskGetTickCount() * portTICK_PERIOD_MS;
+        uint32_t now = pdTICKS_TO_MS(xTaskGetTickCount());
 
         for (int i = 0; i < BUTTON_NUM; i++) {
-            int level = gpio_get_level(s_button_pins[i]);
-            int pressed = (level == 0);  /* Active low: pressed = low */
+            /* Active-low with internal pull-up: 0 = pressed, 1 = released */
+            bool pressed = (gpio_get_level(s_button_pins[i]) == 0);
 
             switch (state[i]) {
             case BTN_STATE_IDLE:
@@ -194,7 +191,7 @@ static void button_task_func(void *arg)
                     ESP_LOGI(TAG, "Button %d pressed", i + 1);
                     uart_console_send_event_btn(i, 1); // Notify PC over UART
                     if (i == 0) {
-                        gpio_set_level(INDICATOR_LED_GPIO, 0); // Turn LED ON (Active Low) when Button 1 is pressed
+                        gpio_set_level(s_indicator_led_gpio, 0); // Turn LED ON (Active Low) when Button 1 is pressed
                     }
 
                     /* Reset inactivity deep sleep timer */
@@ -227,7 +224,7 @@ static void button_task_func(void *arg)
                     ESP_LOGI(TAG, "Button %d released (duration: %lu ms)", i + 1, duration);
                     uart_console_send_event_btn(i, 0); // Notify PC over UART
                     if (i == 0) {
-                        gpio_set_level(INDICATOR_LED_GPIO, 1); // Turn LED OFF (Active Low) when Button 1 is released
+                        gpio_set_level(s_indicator_led_gpio, 1); // Turn LED OFF (Active Low) when Button 1 is released
                     }
                     if (classic_hidd_is_connected()) {
                         classic_hidd_release_key();
@@ -239,7 +236,7 @@ static void button_task_func(void *arg)
                         
                         // 1. Flash LED as physical feedback
                         for (int j = 0; j < 6; j++) {
-                            gpio_set_level(INDICATOR_LED_GPIO, (j % 2 == 0) ? 0 : 1);
+                            gpio_set_level(s_indicator_led_gpio, (j % 2 == 0) ? 0 : 1);
                             vTaskDelay(pdMS_TO_TICKS(100));
                         }
                         
@@ -275,6 +272,15 @@ void button_handler_init(void)
 {
     ESP_LOGI(TAG, "Initializing button handler");
 
+    const board_profile_t *profile = board_profile_get_current();
+    if (profile) {
+        s_indicator_led_gpio = profile->led_gpio;
+        for (int i = 0; i < BUTTON_NUM; i++) {
+            s_button_pins[i] = profile->btn_gpios[i];
+        }
+        ESP_LOGI(TAG, "Applied board profile: %s (LED=%d)", profile->model_name, s_indicator_led_gpio);
+    }
+
     /* Configure GPIO pins as input with pull-up */
     gpio_config_t io_conf = {
         .pin_bit_mask = 0,
@@ -295,8 +301,8 @@ void button_handler_init(void)
     }
 
     /* Indicator LED — simple GPIO, no RMT/DMA conflict with BT */
-    gpio_set_direction(INDICATOR_LED_GPIO, GPIO_MODE_OUTPUT);
-    gpio_set_level(INDICATOR_LED_GPIO, 1); // Default to OFF (1)
+    gpio_set_direction(s_indicator_led_gpio, GPIO_MODE_OUTPUT);
+    gpio_set_level(s_indicator_led_gpio, 1); // Default to OFF (1)
 
     /* Start button monitoring task */
     s_btn_task_running = true;
@@ -311,10 +317,10 @@ void button_handler_init(void)
 
     /* Flash LED 3 times quickly as visual wakeup feedback on boot (Active Low) */
     for (int i = 0; i < 6; i++) {
-        gpio_set_level(INDICATOR_LED_GPIO, (i % 2 == 0) ? 0 : 1); // 0: ON, 1: OFF
+        gpio_set_level(s_indicator_led_gpio, (i % 2 == 0) ? 0 : 1); // 0: ON, 1: OFF
         vTaskDelay(pdMS_TO_TICKS(100));
     }
-    gpio_set_level(INDICATOR_LED_GPIO, 1); // Keep it OFF (1)
+    gpio_set_level(s_indicator_led_gpio, 1); // Keep it OFF (1)
 
     ESP_LOGI(TAG, "Button handler initialized");
 }

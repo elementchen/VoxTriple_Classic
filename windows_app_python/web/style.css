@@ -358,10 +358,91 @@ select:hover {
     justify-content: center;
 }
 
+/* ── 开发板型号选择与切换 ── */
+.board-section {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+}
+
+.board-control-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.board-select-wrapper select {
+    min-width: 124px;
+    padding: 4px 24px 4px 10px;
+    font-size: 11px;
+    height: 26px;
+    background: #f4f4f6;
+    border-radius: var(--border-radius-md);
+}
+
+.btn-board-switch {
+    background-color: var(--accent-orange);
+    color: #ffffff;
+    border-radius: 13px;
+    padding: 0 10px;
+    font-size: 10px;
+    font-weight: 800;
+    height: 24px;
+    box-shadow: 0 2px 8px rgba(255, 107, 0, 0.25);
+    transition: all 0.15s ease;
+}
+
+.btn-board-switch:hover {
+    opacity: 0.9;
+    transform: scale(0.98);
+}
+
 .btn-update-trigger:hover {
     opacity: 0.9;
     transform: scale(0.98);
 }
+
+.board-section {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1px;
+}
+
+.board-control-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.board-select-wrapper select {
+    min-width: 125px;
+    padding: 4px 26px 4px 10px;
+    font-size: 11px;
+    height: 28px;
+}
+
+.btn-board-switch {
+    background-color: var(--accent-orange);
+    color: #ffffff;
+    border-radius: 14px;
+    padding: 0 10px;
+    font-weight: 800;
+    font-size: 10px;
+    height: 28px;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    box-shadow: 0 2px 8px rgba(255, 107, 0, 0.25);
+}
+
+.btn-board-switch:hover {
+    opacity: 0.9;
+    transform: scale(0.96);
+}
+
 
 /* ── 3. 主排版 ─────────────────────────────────────────────────────────── */
 .main-layout {

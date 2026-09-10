@@ -24,3 +24,5 @@ _Archive/windows_app_csharp/
 # Logs & diagnostic caches
 Serial_Log/
 *.log
+**/.cache/
+**/cache/

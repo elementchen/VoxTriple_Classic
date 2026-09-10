@@ -25,22 +25,12 @@
 #include "classic_hidd.h"
 #include "uart_console.h"
 #include "bt_config.h"
+#include "board_profile.h"
 
 static const char *TAG = "MAIN";
 
 void app_main(void)
 {
-    /* Drive indicator LED low immediately so it stays off until a button press. */
-    gpio_config_t led_cfg = {
-        .pin_bit_mask = (1ULL << GPIO_NUM_18),
-        .mode = GPIO_MODE_OUTPUT,
-        .pull_up_en = GPIO_PULLUP_DISABLE,
-        .pull_down_en = GPIO_PULLDOWN_DISABLE,
-        .intr_type = GPIO_INTR_DISABLE,
-    };
-    gpio_config(&led_cfg);
-    gpio_set_level(GPIO_NUM_18, 0);
-
     ESP_LOGI(TAG, "============================================");
     ESP_LOGI(TAG, "  ESP32 Bluetooth Microphone - PTT Mode");
     ESP_LOGI(TAG, "  HFP HF Client + BLE GATT Server");
@@ -50,9 +40,24 @@ void app_main(void)
     ESP_LOGI(TAG, "Step 1: Initializing NVS...");
     ESP_ERROR_CHECK(bt_nvs_init());
 
-    /* Step 2: Load saved configuration */
-    ESP_LOGI(TAG, "Step 2: Loading configuration...");
+    /* Step 2: Load saved configuration & Board Profile */
+    ESP_LOGI(TAG, "Step 2: Loading configuration & Board Profile...");
     config_storage_init();
+    board_profile_init();
+
+    const board_profile_t *profile = board_profile_get_current();
+    gpio_num_t led_pin = profile ? profile->led_gpio : GPIO_NUM_16;
+
+    /* Drive indicator LED high immediately (OFF for active-low LED) */
+    gpio_config_t led_cfg = {
+        .pin_bit_mask = (1ULL << led_pin),
+        .mode = GPIO_MODE_OUTPUT,
+        .pull_up_en = GPIO_PULLUP_DISABLE,
+        .pull_down_en = GPIO_PULLDOWN_DISABLE,
+        .intr_type = GPIO_INTR_DISABLE,
+    };
+    gpio_config(&led_cfg);
+    gpio_set_level(led_pin, 1); // 1 = OFF (Active Low)
 
     /* Check if we need to enter clean OTA mode */
     uint8_t ota_ready = 0;
@@ -65,16 +70,8 @@ void app_main(void)
         // 1. Initialize only Wired UART Console for firmware reception
         ESP_ERROR_CHECK(uart_console_init());
         
-        // 2. Light up board LED (GPIO 16) to show visual OTA indication
-        gpio_config_t led_io = {
-            .pin_bit_mask = (1ULL << GPIO_NUM_16),
-            .mode = GPIO_MODE_OUTPUT,
-            .pull_up_en = GPIO_PULLUP_DISABLE,
-            .pull_down_en = GPIO_PULLDOWN_DISABLE,
-            .intr_type = GPIO_INTR_DISABLE,
-        };
-        gpio_config(&led_io);
-        gpio_set_level(GPIO_NUM_16, 0); // ON (Active Low)
+        // 2. Light up board LED to show visual OTA indication (0: ON)
+        gpio_set_level(led_pin, 0); // ON (Active Low)
         
         // 3. Keep main task idle while UART receives firmware
         while (1) {

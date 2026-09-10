@@ -320,8 +320,25 @@ class SppClient:
             return True
         return False
 
+    async def read_board_model(self) -> int | None:
+        """Get the hardware board model from cache (0: WEMOS 18650, 1: ESP32 Lite V1.0.0)."""
+        if not self._config_cache:
+            await self._fetch_config()
+        return self._config_cache.get("board_model", 0)
+
+    async def write_board_model(self, model: int) -> bool:
+        """Save hardware board model to the ESP32 and trigger reboot."""
+        resp = await self._send_cmd({
+            "cmd": "set_board_model",
+            "model": model
+        })
+        if resp and resp.get("status") == "ok":
+            self._config_cache["board_model"] = model
+            return True
+        return False
+
     async def get_config(self) -> dict | None:
-        """Fetch and return full configuration dictionary formatted for macOS UI client."""
+        """Fetch and return full configuration dictionary formatted for UI client."""
         ok = await self._fetch_config()
         if ok:
             cfg = {
@@ -334,7 +351,9 @@ class SppClient:
                 "tx_power": self._config_cache.get("tx_power", 4),
                 "sleep": self._config_cache.get("sleep_mode", 1),
                 "mic_enabled": self._config_cache.get("mic_enabled", 1),
-                "version": self._config_cache.get("version", "1.0.0")
+                "version": self._config_cache.get("version", "1.0.0"),
+                "board_model": self._config_cache.get("board_model", 0),
+                "board_name": self._config_cache.get("board_name", "WEMOS 18650")
             }
             return cfg
         return None
