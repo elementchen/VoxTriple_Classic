@@ -44,19 +44,21 @@ void execute_config_cmd(const char *cmd_line, size_t len, cmd_respond_cb_t respo
             config_storage_load_sleep_mode(&sleep_mode);
             uint8_t mic_enabled = 1;
             config_storage_load_mic_enabled(&mic_enabled);
+            uint8_t sleep_timeout_min = 5;
+            config_storage_load_sleep_timeout(&sleep_timeout_min);
             
             const board_profile_t *profile = board_profile_get_current();
             uint8_t board_model = profile ? (uint8_t)profile->model : 0;
             const char *board_name = profile ? profile->model_name : "WEMOS 18650";
 
             const esp_app_desc_t *app_desc = esp_app_get_description();
-            char resp[450];
+            char resp[512];
             snprintf(resp, sizeof(resp), 
                      "{\"status\":\"ok\",\"version\":\"%s\",\"btn1_vk\":%d,\"btn1_mod\":%d,\"btn2_vk\":%d,\"btn2_mod\":%d,"
                      "\"btn3_vk\":%d,\"btn3_mod\":%d,\"btn4_vk\":%d,\"btn4_mod\":%d,\"tx_power\":%d,\"sleep_mode\":%d,\"mic_enabled\":%d,"
-                     "\"board_model\":%d,\"board_name\":\"%s\"}\n",
+                     "\"board_model\":%d,\"board_name\":\"%s\",\"sleep_timeout_min\":%d}\n",
                      app_desc->version, vk1, mod1, vk2, mod2, vk3, mod3, vk4, mod4, tx_power, sleep_mode, mic_enabled,
-                     board_model, board_name);
+                     board_model, board_name, sleep_timeout_min);
             respond_cb(resp, strlen(resp));
             
         } else if (strcmp(cmd, "set_btn") == 0) {
@@ -120,6 +122,22 @@ void execute_config_cmd(const char *cmd_line, size_t len, cmd_respond_cb_t respo
                     esp_restart();
                 } else {
                     const char *resp = "{\"status\":\"error\",\"reason\":\"invalid_model\"}\n";
+                    respond_cb(resp, strlen(resp));
+                }
+            }
+        } else if (strcmp(cmd, "set_sleep_timeout") == 0) {
+            cJSON *min_item = cJSON_GetObjectItem(root, "minutes");
+            if (min_item && cJSON_IsNumber(min_item)) {
+                uint8_t minutes = (uint8_t)min_item->valueint;
+                if (minutes >= 1 && minutes <= 120) {
+                    config_storage_save_sleep_timeout(minutes);
+                    const char *resp = "{\"status\":\"ok\"}\n";
+                    respond_cb(resp, strlen(resp));
+                    ESP_LOGI(TAG, "Sleep timeout updated to %d min. Restarting...", minutes);
+                    vTaskDelay(pdMS_TO_TICKS(500));
+                    esp_restart();
+                } else {
+                    const char *resp = "{\"status\":\"error\",\"reason\":\"out_of_range\"}\n";
                     respond_cb(resp, strlen(resp));
                 }
             }

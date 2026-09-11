@@ -36,7 +36,9 @@ static const char *TAG = "BTN_HANDLER";
 #include "board_profile.h"
 
 static gpio_num_t s_indicator_led_gpio = GPIO_NUM_16;
-#define INACTIVITY_MS        (30 * 60 * 1000)  /* 30 min deep sleep timeout */
+#define DEFAULT_INACTIVITY_MIN   5    /* Default: 5 min deep sleep timeout */
+#define MIN_INACTIVITY_MIN       1
+#define MAX_INACTIVITY_MIN       120
 
 static TimerHandle_t s_inactivity_timer = NULL;
 
@@ -309,9 +311,20 @@ void button_handler_init(void)
     xTaskCreate(button_task_func, "BtnTask", BUTTON_TASK_STACK,
                 NULL, BUTTON_TASK_PRIORITY, &s_btn_task_handle);
 
-    /* Start inactivity deep sleep timer (30 min) */
+    /* Start inactivity deep sleep timer — load timeout from NVS */
+    uint8_t timeout_min = DEFAULT_INACTIVITY_MIN;
+    if (config_storage_load_sleep_timeout(&timeout_min) != ESP_OK) {
+        ESP_LOGI(TAG, "No saved sleep timeout, using default %d min", DEFAULT_INACTIVITY_MIN);
+        config_storage_save_sleep_timeout(DEFAULT_INACTIVITY_MIN);
+        timeout_min = DEFAULT_INACTIVITY_MIN;
+    }
+    if (timeout_min < MIN_INACTIVITY_MIN || timeout_min > MAX_INACTIVITY_MIN) {
+        timeout_min = DEFAULT_INACTIVITY_MIN;
+    }
+    uint32_t inactivity_ms = (uint32_t)timeout_min * 60 * 1000;
+    ESP_LOGI(TAG, "Inactivity sleep timeout: %d min (%lu ms)", timeout_min, (unsigned long)inactivity_ms);
     s_inactivity_timer = xTimerCreate("inact_tmr",
-                                       pdMS_TO_TICKS(INACTIVITY_MS),
+                                       pdMS_TO_TICKS(inactivity_ms),
                                        pdFALSE, NULL, inactivity_sleep_cb);
     if (s_inactivity_timer) xTimerStart(s_inactivity_timer, 0);
 

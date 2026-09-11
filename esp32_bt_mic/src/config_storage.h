@@ -23,8 +23,9 @@
 #define NVS_KEY_SLEEP_MODE "sleep_mode"
 #define NVS_KEY_MIC_ENABLED "mic_enabled"
 #define NVS_KEY_TX_POWER   "tx_power"
-#define NVS_KEY_OTA_READY   "ota_ready"
-#define NVS_KEY_BOARD_MODEL "hw_model"
+#define NVS_KEY_OTA_READY      "ota_ready"
+#define NVS_KEY_BOARD_MODEL    "hw_model"
+#define NVS_KEY_SLEEP_TIMEOUT  "sleep_tmout"
 
 /**
  * @brief Initialize NVS configuration storage
@@ -113,5 +114,19 @@ esp_err_t config_storage_load_ota_ready(uint8_t *ready);
 
 esp_err_t config_storage_save_board_model(uint8_t model);
 esp_err_t config_storage_load_board_model(uint8_t *model);
+
+/**
+ * @brief Save inactivity deep sleep timeout to NVS
+ * @param minutes  Idle minutes before entering deep sleep (1-120)
+ * @return ESP_OK on success
+ */
+esp_err_t config_storage_save_sleep_timeout(uint8_t minutes);
+
+/**
+ * @brief Load inactivity deep sleep timeout from NVS
+ * @param minutes  Output: idle minutes (default 5)
+ * @return ESP_OK on success, ESP_ERR_NVS_NOT_FOUND if not saved
+ */
+esp_err_t config_storage_load_sleep_timeout(uint8_t *minutes);
 
 #endif /* __CONFIG_STORAGE_H__ */

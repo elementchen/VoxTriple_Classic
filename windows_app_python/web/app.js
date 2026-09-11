@@ -59,6 +59,7 @@ let selectedOtaPath = "";
 let isConnected = false;
 let capturingIdx = -1;
 let currentBoardModel = 0;
+let currentSleepTimeoutMin = 5;
 
 // ── Dom Initialization ───────────────────────────────────────────────────
 document.addEventListener("DOMContentLoaded", () => {
@@ -190,6 +191,14 @@ async function onConnectClick() {
         const btnBoardSwitch = document.getElementById("btn-board-switch");
         if (btnBoardSwitch) btnBoardSwitch.style.display = "none";
         
+        // 隐藏休眠等待时间区块
+        const sleepDivider = document.getElementById("sleep-timeout-divider");
+        if (sleepDivider) sleepDivider.style.display = "none";
+        const sleepSection = document.getElementById("sleep-timeout-section");
+        if (sleepSection) sleepSection.style.display = "none";
+        const btnSleepApply = document.getElementById("btn-sleep-timeout-apply");
+        if (btnSleepApply) btnSleepApply.style.display = "none";
+        
         resetConfigUi();
     }
 }
@@ -214,6 +223,21 @@ function renderConfig(config) {
     if (boardSection) boardSection.style.display = "flex";
     const btnBoardSwitch = document.getElementById("btn-board-switch");
     if (btnBoardSwitch) btnBoardSwitch.style.display = "none";
+
+    // 更新休眠等待时间
+    if (config.sleep_timeout_min !== undefined) {
+        currentSleepTimeoutMin = config.sleep_timeout_min;
+        const sleepSelect = document.getElementById("sleep-timeout-select");
+        if (sleepSelect) {
+            sleepSelect.value = String(config.sleep_timeout_min);
+        }
+    }
+    const sleepDivider = document.getElementById("sleep-timeout-divider");
+    if (sleepDivider) sleepDivider.style.display = "block";
+    const sleepSection = document.getElementById("sleep-timeout-section");
+    if (sleepSection) sleepSection.style.display = "flex";
+    const btnSleepApply = document.getElementById("btn-sleep-timeout-apply");
+    if (btnSleepApply) btnSleepApply.style.display = "none";
 
     setTxPowerUi(config.tx_power !== undefined ? config.tx_power : 4);
     
@@ -690,5 +714,59 @@ async function applyBoardSwitch() {
         btnSwitch.textContent = "APPLY";
         alert("执行切换发生异常: " + e.message);
         select.value = String(currentBoardModel);
+    }
+}
+
+// ── 休眠等待时间选择与应用 ─────────────────────────────────────────────────
+function onSleepTimeoutChange() {
+    const select = document.getElementById("sleep-timeout-select");
+    const btnApply = document.getElementById("btn-sleep-timeout-apply");
+    if (!select || !btnApply) return;
+    
+    const selectedMin = parseInt(select.value);
+    if (selectedMin !== currentSleepTimeoutMin) {
+        btnApply.style.display = "flex";
+    } else {
+        btnApply.style.display = "none";
+    }
+}
+
+async function applySleepTimeout() {
+    if (!window.pywebview || !window.pywebview.api) return;
+    const select = document.getElementById("sleep-timeout-select");
+    const newMin = parseInt(select.value);
+    
+    const confirmed = confirm(`确认将深度休眠等待时间设置为 [${newMin} 分钟]？\n\n设备将写入配置并自动重启，生效后请重新点击 CONNECT 连接。`);
+    if (!confirmed) {
+        select.value = String(currentSleepTimeoutMin);
+        document.getElementById("btn-sleep-timeout-apply").style.display = "none";
+        return;
+    }
+    
+    const btnApply = document.getElementById("btn-sleep-timeout-apply");
+    btnApply.disabled = true;
+    btnApply.textContent = "SAVING...";
+    
+    try {
+        const res = await window.pywebview.api.set_sleep_timeout_min(newMin);
+        btnApply.disabled = false;
+        btnApply.textContent = "APPLY";
+        btnApply.style.display = "none";
+        
+        if (res && res.success) {
+            currentSleepTimeoutMin = newMin;
+            alert(`休眠等待时间已成功更新为 [${newMin} 分钟]！\n设备正在重启，请等待几秒后重新点击 CONNECT 连接。`);
+            if (isConnected) {
+                onConnectClick();
+            }
+        } else {
+            alert("设置失败: " + (res ? res.message : "未知错误"));
+            select.value = String(currentSleepTimeoutMin);
+        }
+    } catch (e) {
+        btnApply.disabled = false;
+        btnApply.textContent = "APPLY";
+        alert("执行设置发生异常: " + e.message);
+        select.value = String(currentSleepTimeoutMin);
     }
 }

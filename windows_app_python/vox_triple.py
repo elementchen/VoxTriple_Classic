@@ -91,6 +91,7 @@ class Api:
             "mic_enabled": self.spp._config_cache.get("mic_enabled", 1),
             "board_model": self.spp._config_cache.get("board_model", 0),
             "board_name": self.spp._config_cache.get("board_name", "WEMOS 18650"),
+            "sleep_timeout_min": self.spp._config_cache.get("sleep_timeout_min", 5),
             "mappings": []
         }
         for i in range(4):
@@ -110,14 +111,23 @@ class Api:
         ok = future.result(timeout=5.0)
         return ok
 
-    def set_board_model(self, model: int) -> bool:
+    def set_board_model(self, model: int) -> dict:
         """Set board hardware model on device and trigger restart."""
         if not self._connected:
-            return False
+            return {"success": False, "message": "Not connected"}
         log.info(f"Set board hardware model: {model}")
         future = run_coro(self.spp.write_board_model(model))
         ok = future.result(timeout=5.0)
-        return ok
+        return {"success": ok, "message": "ok" if ok else "write failed"}
+
+    def set_sleep_timeout_min(self, minutes: int) -> dict:
+        """Set inactivity sleep timeout (minutes) on device and trigger restart."""
+        if not self._connected:
+            return {"success": False, "message": "Not connected"}
+        log.info(f"Set sleep timeout: {minutes} min")
+        future = run_coro(self.spp.write_sleep_timeout_min(minutes))
+        ok = future.result(timeout=5.0)
+        return {"success": ok, "message": "ok" if ok else "write failed"}
 
     def select_local_bin(self) -> str | None:
         """Select a local firmware file using Windows native file dialog via Tkinter fallback to ensure non-UI thread safety."""

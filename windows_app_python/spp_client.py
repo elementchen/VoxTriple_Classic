@@ -337,6 +337,23 @@ class SppClient:
             return True
         return False
 
+    async def read_sleep_timeout_min(self) -> int | None:
+        """Get the inactivity deep sleep timeout (in minutes) from cache."""
+        if not self._config_cache:
+            await self._fetch_config()
+        return self._config_cache.get("sleep_timeout_min", 5)
+
+    async def write_sleep_timeout_min(self, minutes: int) -> bool:
+        """Save inactivity sleep timeout (minutes) to the ESP32 and trigger reboot."""
+        resp = await self._send_cmd({
+            "cmd": "set_sleep_timeout",
+            "minutes": minutes
+        })
+        if resp and resp.get("status") == "ok":
+            self._config_cache["sleep_timeout_min"] = minutes
+            return True
+        return False
+
     async def get_config(self) -> dict | None:
         """Fetch and return full configuration dictionary formatted for UI client."""
         ok = await self._fetch_config()
@@ -353,7 +370,8 @@ class SppClient:
                 "mic_enabled": self._config_cache.get("mic_enabled", 1),
                 "version": self._config_cache.get("version", "1.0.0"),
                 "board_model": self._config_cache.get("board_model", 0),
-                "board_name": self._config_cache.get("board_name", "WEMOS 18650")
+                "board_name": self._config_cache.get("board_name", "WEMOS 18650"),
+                "sleep_timeout_min": self._config_cache.get("sleep_timeout_min", 5)
             }
             return cfg
         return None
