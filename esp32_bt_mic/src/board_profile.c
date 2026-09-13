@@ -18,7 +18,7 @@ static const board_profile_t s_board_profiles[BOARD_MODEL_MAX] = {
         .i2s_bck_gpio = GPIO_NUM_21,
         .i2s_ws_gpio = GPIO_NUM_22,
         .i2s_data_gpio = GPIO_NUM_17,
-        .btn_gpios = { GPIO_NUM_4, GPIO_NUM_19, GPIO_NUM_23, GPIO_NUM_18 }
+        .btn_gpios = { GPIO_NUM_4, GPIO_NUM_18, GPIO_NUM_19, GPIO_NUM_23 }
     },
     [BOARD_MODEL_ESP32_LITE_V1] = {
         .model = BOARD_MODEL_ESP32_LITE_V1,
@@ -31,7 +31,7 @@ static const board_profile_t s_board_profiles[BOARD_MODEL_MAX] = {
     }
 };
 
-static board_model_t s_current_model = BOARD_MODEL_ESP32_LITE_V1;
+static board_model_t s_current_model = BOARD_MODEL_WEMOS_18650;
 
 void board_profile_init(void)
 {
@@ -40,7 +40,7 @@ void board_profile_init(void)
     if (err == ESP_OK && model < BOARD_MODEL_MAX) {
         s_current_model = (board_model_t)model;
     } else {
-        s_current_model = BOARD_MODEL_ESP32_LITE_V1;
+        s_current_model = BOARD_MODEL_WEMOS_18650;
     }
     ESP_LOGI(TAG, "Active Board Profile: [%d] %s (LED=%d, BCK=%d, WS=%d, DATA=%d)",
              s_current_model, s_board_profiles[s_current_model].model_name,
