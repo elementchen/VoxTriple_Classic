@@ -13,7 +13,7 @@
             <div class="logo-card">
                 <img src="logo.png" alt="Logo" class="logo-img">
                 <span class="logo-title">KeyMapper</span>
-                <span class="logo-version" id="app-version">v1.0.13</span>
+                <span class="logo-version" id="app-version">v1.0.15</span>
             </div>
         </div>
 
@@ -50,6 +50,43 @@
                 <div class="firmware-status-wrapper">
                     <span class="firmware-version" id="firmware-ver">v--</span>
                     <span class="firmware-status-label" id="firmware-status-label"></span>
+                </div>
+            </div>
+            
+            <div class="divider" id="board-divider" style="display: none;"></div>
+
+            <div class="board-section" id="board-section" style="display: none;">
+                <span class="control-label">BOARD</span>
+                <div class="board-control-wrapper">
+                    <div class="select-wrapper board-select-wrapper">
+                        <select id="board-select" onchange="onBoardSelectChange()">
+                            <option value="0">WEMOS 18650</option>
+                            <option value="1">ESP32 Lite V1</option>
+                        </select>
+                    </div>
+                    <button class="btn btn-board-switch" id="btn-board-switch" onclick="applyBoardSwitch()" style="display: none;" title="Save & Apply Board Model">APPLY</button>
+                </div>
+            </div>
+            
+            <div class="divider" id="sleep-timeout-divider" style="display: none;"></div>
+
+            <div class="sleep-timeout-section" id="sleep-timeout-section" style="display: none;">
+                <span class="control-label">SLEEP</span>
+                <div class="sleep-timeout-control-wrapper">
+                    <div class="select-wrapper sleep-timeout-select-wrapper">
+                        <select id="sleep-timeout-select" onchange="onSleepTimeoutChange()">
+                            <option value="1">1 min</option>
+                            <option value="2">2 min</option>
+                            <option value="3">3 min</option>
+                            <option value="5" selected>5 min</option>
+                            <option value="10">10 min</option>
+                            <option value="15">15 min</option>
+                            <option value="20">20 min</option>
+                            <option value="30">30 min</option>
+                            <option value="60">60 min</option>
+                        </select>
+                    </div>
+                    <button class="btn btn-sleep-timeout-apply" id="btn-sleep-timeout-apply" onclick="applySleepTimeout()" style="display: none;" title="Save &amp; Apply Sleep Timeout">APPLY</button>
                 </div>
             </div>
             

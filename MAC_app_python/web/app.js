@@ -55,6 +55,8 @@ let currentConfigs = [
 ];
 let isConnected = false;
 let capturingIdx = -1;
+let currentBoardModel = 0;
+let currentSleepTimeoutMin = 5;
 
 // ── Dom Initialization ───────────────────────────────────────────────────
 document.addEventListener("DOMContentLoaded", () => {
@@ -63,24 +65,26 @@ document.addEventListener("DOMContentLoaded", () => {
     
     // File Drag-Drop binding for OTA zone
     const dropzone = document.getElementById("dropzone");
-    dropzone.addEventListener("dragover", (e) => {
-        e.preventDefault();
-        dropzone.classList.add("dragover");
-    });
-    dropzone.addEventListener("dragleave", () => {
-        dropzone.classList.remove("dragover");
-    });
-    dropzone.addEventListener("drop", (e) => {
-        e.preventDefault();
-        dropzone.classList.remove("dragover");
-        if (e.dataTransfer.files.length > 0) {
-            const file = e.dataTransfer.files[0];
-            if (file.name.endsWith(".bin")) {
-                selectedOtaPath = file.path || file.name;
-                updateOtaSelectedFile(file.name);
+    if (dropzone) {
+        dropzone.addEventListener("dragover", (e) => {
+            e.preventDefault();
+            dropzone.classList.add("dragover");
+        });
+        dropzone.addEventListener("dragleave", () => {
+            dropzone.classList.remove("dragover");
+        });
+        dropzone.addEventListener("drop", (e) => {
+            e.preventDefault();
+            dropzone.classList.remove("dragover");
+            if (e.dataTransfer.files.length > 0) {
+                const file = e.dataTransfer.files[0];
+                if (file.name.endsWith(".bin")) {
+                    selectedOtaPath = file.path || file.name;
+                    updateOtaSelectedFile(file.name);
+                }
             }
-        }
-    });
+        });
+    }
     
     // Poll serial ports every 3.0s
     setInterval(pollPorts, 3000);
@@ -178,6 +182,22 @@ async function onConnectClick() {
         const fwSection = document.getElementById("firmware-section");
         if (fwSection) fwSection.style.display = "none";
         
+        // 隐藏开发板型号信息区块
+        const boardDivider = document.getElementById("board-divider");
+        if (boardDivider) boardDivider.style.display = "none";
+        const boardSection = document.getElementById("board-section");
+        if (boardSection) boardSection.style.display = "none";
+        const btnBoardSwitch = document.getElementById("btn-board-switch");
+        if (btnBoardSwitch) btnBoardSwitch.style.display = "none";
+        
+        // 隐藏休眠等待时间区块
+        const sleepDivider = document.getElementById("sleep-timeout-divider");
+        if (sleepDivider) sleepDivider.style.display = "none";
+        const sleepSection = document.getElementById("sleep-timeout-section");
+        if (sleepSection) sleepSection.style.display = "none";
+        const btnSleepApply = document.getElementById("btn-sleep-timeout-apply");
+        if (btnSleepApply) btnSleepApply.style.display = "none";
+        
         // 隐藏并折叠右侧 OTA 升级卡片，恢复左侧全宽
         const layout = document.querySelector(".bottom-layout");
         if (layout) layout.classList.add("ota-hidden");
@@ -188,10 +208,40 @@ async function onConnectClick() {
 
 // ── Render Config Cache ──────────────────────────────────────────────────
 function renderConfig(config) {
-    document.getElementById("firmware-ver").textContent = "v" + (config.version || "1.0.10");
+    document.getElementById("firmware-ver").textContent = "v" + (config.version || "1.0.15");
     document.getElementById("mic-toggle").checked = (config.mic_enabled === 1);
     document.getElementById("sleep-toggle").checked = (config.sleep_mode === 1);
     
+    // 更新开发板型号
+    if (config.board_model !== undefined) {
+        currentBoardModel = config.board_model;
+        const boardSelect = document.getElementById("board-select");
+        if (boardSelect) {
+            boardSelect.value = String(config.board_model);
+        }
+    }
+    const boardDivider = document.getElementById("board-divider");
+    if (boardDivider) boardDivider.style.display = "block";
+    const boardSection = document.getElementById("board-section");
+    if (boardSection) boardSection.style.display = "flex";
+    const btnBoardSwitch = document.getElementById("btn-board-switch");
+    if (btnBoardSwitch) btnBoardSwitch.style.display = "none";
+
+    // 更新休眠等待时间
+    if (config.sleep_timeout_min !== undefined) {
+        currentSleepTimeoutMin = config.sleep_timeout_min;
+        const sleepSelect = document.getElementById("sleep-timeout-select");
+        if (sleepSelect) {
+            sleepSelect.value = String(config.sleep_timeout_min);
+        }
+    }
+    const sleepDivider = document.getElementById("sleep-timeout-divider");
+    if (sleepDivider) sleepDivider.style.display = "block";
+    const sleepSection = document.getElementById("sleep-timeout-section");
+    if (sleepSection) sleepSection.style.display = "flex";
+    const btnSleepApply = document.getElementById("btn-sleep-timeout-apply");
+    if (btnSleepApply) btnSleepApply.style.display = "none";
+
     setTxPowerUi(config.tx_power !== undefined ? config.tx_power : 4);
     
     for (let i = 0; i < 4; i++) {
@@ -601,5 +651,119 @@ function onPhysicalButtonEvent(btnId, state) {
         setTimeout(() => {
             monitorVal.style.transform = "scale(1)";
         }, 150);
+    }
+}
+
+// ── 开发板型号选择与切换交互 ───────────────────────────────────────────────
+function onBoardSelectChange() {
+    const select = document.getElementById("board-select");
+    const btnSwitch = document.getElementById("btn-board-switch");
+    if (!select || !btnSwitch) return;
+    
+    const selectedModel = parseInt(select.value);
+    if (selectedModel !== currentBoardModel) {
+        btnSwitch.style.display = "block";
+    } else {
+        btnSwitch.style.display = "none";
+    }
+}
+
+async function applyBoardSwitch() {
+    if (!window.pywebview || !window.pywebview.api) return;
+    const select = document.getElementById("board-select");
+    const newModel = parseInt(select.value);
+    const modelNames = {
+        0: "WEMOS 18650",
+        1: "ESP32 Lite V1.0.0"
+    };
+    const targetName = modelNames[newModel] || `Model ${newModel}`;
+    
+    const confirmed = confirm(`确认将设备型号切换为 [${targetName}]？\n\n设备将写入配置并自动重启，生效后请重新点击 CONNECT 连接。`);
+    if (!confirmed) {
+        select.value = String(currentBoardModel);
+        document.getElementById("btn-board-switch").style.display = "none";
+        return;
+    }
+    
+    const btnSwitch = document.getElementById("btn-board-switch");
+    btnSwitch.disabled = true;
+    btnSwitch.textContent = "SAVING...";
+    
+    try {
+        const res = await window.pywebview.api.set_board_model(newModel);
+        btnSwitch.disabled = false;
+        btnSwitch.textContent = "APPLY";
+        btnSwitch.style.display = "none";
+        
+        if (res && res.success) {
+            currentBoardModel = newModel;
+            alert(`开发板型号已成功更新为 [${targetName}]！\n设备正在重启，请等待几秒后重新点击 CONNECT 连接。`);
+            // 主动断开当前连接
+            if (isConnected) {
+                onConnectClick();
+            }
+        } else {
+            alert("切换失败: " + (res ? res.message : "未知错误"));
+            select.value = String(currentBoardModel);
+        }
+    } catch (e) {
+        btnSwitch.disabled = false;
+        btnSwitch.textContent = "APPLY";
+        alert("执行切换发生异常: " + e.message);
+        select.value = String(currentBoardModel);
+    }
+}
+
+// ── 休眠等待时间选择与应用 ─────────────────────────────────────────────────
+function onSleepTimeoutChange() {
+    const select = document.getElementById("sleep-timeout-select");
+    const btnApply = document.getElementById("btn-sleep-timeout-apply");
+    if (!select || !btnApply) return;
+    
+    const selectedMin = parseInt(select.value);
+    if (selectedMin !== currentSleepTimeoutMin) {
+        btnApply.style.display = "flex";
+    } else {
+        btnApply.style.display = "none";
+    }
+}
+
+async function applySleepTimeout() {
+    if (!window.pywebview || !window.pywebview.api) return;
+    const select = document.getElementById("sleep-timeout-select");
+    const newMin = parseInt(select.value);
+    
+    const confirmed = confirm(`确认将深度休眠等待时间设置为 [${newMin} 分钟]？\n\n设备将写入配置并自动重启，生效后请重新点击 CONNECT 连接。`);
+    if (!confirmed) {
+        select.value = String(currentSleepTimeoutMin);
+        document.getElementById("btn-sleep-timeout-apply").style.display = "none";
+        return;
+    }
+    
+    const btnApply = document.getElementById("btn-sleep-timeout-apply");
+    btnApply.disabled = true;
+    btnApply.textContent = "SAVING...";
+    
+    try {
+        const res = await window.pywebview.api.set_sleep_timeout_min(newMin);
+        btnApply.disabled = false;
+        btnApply.textContent = "APPLY";
+        btnApply.style.display = "none";
+        
+        if (res && res.success) {
+            currentSleepTimeoutMin = newMin;
+            alert(`休眠等待时间已成功更新为 [${newMin} 分钟]！\n设备正在重启，请等待几秒后重新点击 CONNECT 连接。`);
+            if (isConnected) {
+                onConnectClick();
+            }
+        } else {
+            alert("设置失败: " + (res ? res.message : "未知错误"));
+            select.value = String(currentSleepTimeoutMin);
+        }
+    } catch (e) {
+        btnApply.disabled = false;
+        btnApply.textContent = "APPLY";
+        alert("执行设置发生异常: " + e.message);
+        select.value = String(currentSleepTimeoutMin);
     }
 }

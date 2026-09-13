@@ -92,10 +92,13 @@ class Api:
             
         # Format mapping list to JSON compatible
         config = {
-            "version": self.spp._config_cache.get("version", "1.0.9"),
+            "version": self.spp._config_cache.get("version", "1.0.15"),
             "tx_power": self.spp._config_cache.get("tx_power", 4),
             "sleep_mode": self.spp._config_cache.get("sleep_mode", 1),
             "mic_enabled": self.spp._config_cache.get("mic_enabled", 1),
+            "board_model": self.spp._config_cache.get("board_model", 0),
+            "board_name": self.spp._config_cache.get("board_name", "WEMOS 18650"),
+            "sleep_timeout_min": self.spp._config_cache.get("sleep_timeout_min", 5),
             "mappings": []
         }
         for i in range(4):
@@ -114,6 +117,24 @@ class Api:
         future = run_coro(self.spp.set_config(mappings, tx, sleep, mic))
         ok = future.result(timeout=5.0)
         return ok
+
+    def set_board_model(self, model: int) -> dict:
+        """Set board hardware model on device and trigger restart."""
+        if not self._connected:
+            return {"success": False, "message": "Not connected"}
+        log.info(f"Set board hardware model: {model}")
+        future = run_coro(self.spp.write_board_model(model))
+        ok = future.result(timeout=5.0)
+        return {"success": ok, "message": "ok" if ok else "write failed"}
+
+    def set_sleep_timeout_min(self, minutes: int) -> dict:
+        """Set inactivity sleep timeout (minutes) on device and trigger restart."""
+        if not self._connected:
+            return {"success": False, "message": "Not connected"}
+        log.info(f"Set sleep timeout: {minutes} min")
+        future = run_coro(self.spp.write_sleep_timeout_min(minutes))
+        ok = future.result(timeout=5.0)
+        return {"success": ok, "message": "ok" if ok else "write failed"}
 
     def select_local_bin(self) -> str | None:
         """Select a local firmware file using macOS Finder dialog (via AppleScript to bypass Frameless Sandboxing)."""
@@ -165,7 +186,7 @@ class Api:
             log.warning(f"check_update network request failed/timeout: {e}")
             
         if self._github_version:
-            curr = self.spp._config_cache.get("version", "1.0.10")
+            curr = self.spp._config_cache.get("version", "1.0.15")
             has_new = self._github_version > curr
             return {
                 "ok": True,
@@ -266,7 +287,7 @@ class Api:
             req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
             with urllib.request.urlopen(req, timeout=4.0) as resp:
                 data = json.loads(resp.read().decode("utf-8"))
-                tag = data.get("tag_name", "v1.0.13").strip()
+                tag = data.get("tag_name", "v1.0.15").strip()
                 if tag.startswith("v"):
                     tag = tag[1:]
                 self._github_version = tag

@@ -109,7 +109,7 @@ app = BUNDLE(
     name='VoxTriple.app',
     icon='VoxTriple.icns',
     bundle_identifier='com.voxtriple.config',
-    version='1.7.0',
+    version='1.0.15',
     info_plist={
         'NSHighResolutionCapable': True,
         'NSBluetoothAlwaysUsageDescription': 'VoxTriple uses Bluetooth to configure your ESP32 BT Microphone.',
