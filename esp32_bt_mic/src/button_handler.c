@@ -41,6 +41,12 @@ static gpio_num_t s_indicator_led_gpio = GPIO_NUM_16;
 #define MAX_INACTIVITY_MIN       120
 
 static TimerHandle_t s_inactivity_timer = NULL;
+static gpio_num_t s_button_pins[BUTTON_NUM] = {
+    GPIO_NUM_4,
+    GPIO_NUM_19,
+    GPIO_NUM_23,
+    GPIO_NUM_18,
+};
 
 static bool is_rtc_gpio(gpio_num_t gpio)
 {
@@ -72,7 +78,7 @@ static bool is_rtc_gpio(gpio_num_t gpio)
 /* Enter sleep — adaptive selection of Deep Sleep or Light Sleep based on RTC IO capability. */
 static void inactivity_sleep_cb(TimerHandle_t xTimer)
 {
-    gpio_num_t wakeup_pin = CONFIG_BUTTON_1_GPIO;
+    gpio_num_t wakeup_pin = s_button_pins[0];
     bool can_deep_sleep = is_rtc_gpio(wakeup_pin);
 
     if (can_deep_sleep) {
@@ -141,12 +147,6 @@ static void get_button_mapping(uint8_t button_id, uint8_t *vk_code, uint8_t *mod
     }
 }
 
-static gpio_num_t s_button_pins[BUTTON_NUM] = {
-    CONFIG_BUTTON_1_GPIO,
-    CONFIG_BUTTON_2_GPIO,
-    CONFIG_BUTTON_3_GPIO,
-    CONFIG_BUTTON_4_GPIO,
-};
 
 typedef enum {
     BTN_STATE_IDLE,
