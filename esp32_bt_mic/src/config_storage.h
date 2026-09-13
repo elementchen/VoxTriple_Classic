@@ -63,6 +63,12 @@ esp_err_t config_storage_save_hfp_addr(esp_bd_addr_t addr);
 esp_err_t config_storage_load_hfp_addr(esp_bd_addr_t addr);
 
 /**
+ * @brief Clear paired HFP device address from NVS
+ * @return ESP_OK on success
+ */
+esp_err_t config_storage_clear_hfp_addr(void);
+
+/**
  * @brief Save Classic BT TX power level to NVS
  * @param level  Power level (0-7, maps to ESP_PWR_LVL_N12..ESP_PWR_LVL_P9)
  * @return ESP_OK on success

@@ -199,6 +199,12 @@ async function onConnectClick() {
         const btnSleepApply = document.getElementById("btn-sleep-timeout-apply");
         if (btnSleepApply) btnSleepApply.style.display = "none";
         
+        // 隐藏重置蓝牙配对按钮
+        const resetBtDivider = document.getElementById("reset-bt-divider");
+        if (resetBtDivider) resetBtDivider.style.display = "none";
+        const resetBtSection = document.getElementById("reset-bt-section");
+        if (resetBtSection) resetBtSection.style.display = "none";
+        
         resetConfigUi();
     }
 }
@@ -238,6 +244,12 @@ function renderConfig(config) {
     if (sleepSection) sleepSection.style.display = "flex";
     const btnSleepApply = document.getElementById("btn-sleep-timeout-apply");
     if (btnSleepApply) btnSleepApply.style.display = "none";
+
+    // 显示重置蓝牙配对按钮
+    const resetBtDivider = document.getElementById("reset-bt-divider");
+    if (resetBtDivider) resetBtDivider.style.display = "block";
+    const resetBtSection = document.getElementById("reset-bt-section");
+    if (resetBtSection) resetBtSection.style.display = "flex";
 
     setTxPowerUi(config.tx_power !== undefined ? config.tx_power : 4);
     
@@ -768,5 +780,46 @@ async function applySleepTimeout() {
         btnApply.textContent = "APPLY";
         alert("执行设置发生异常: " + e.message);
         select.value = String(currentSleepTimeoutMin);
+    }
+}
+
+// ── 遗忘蓝牙连接重置交互 ─────────────────────────────────────────────────────
+async function confirmResetBtPairing() {
+    if (!isConnected) {
+        alert("设备未连接，请先连接设备。");
+        return;
+    }
+    const confirmed = confirm(
+        "确定要遗忘当前设备的蓝牙配对吗？\n\n" +
+        "• 操作效果：设备将清空所有蓝牙配对记录和历史连接缓存，并自动重启。\n" +
+        "• 适用场景：需要更换新电脑配对，或遇到蓝牙重连异常。\n" +
+        "• 安全保护：按键键位映射、开发板型号、休眠时间等均会完整保留！\n\n" +
+        "点击【确定】立即执行并重启设备。"
+    );
+    if (!confirmed) return;
+
+    const btn = document.getElementById("btn-reset-bt");
+    if (btn) {
+        btn.disabled = true;
+        btn.textContent = "RESETTING...";
+    }
+
+    try {
+        const res = await window.pywebview.api.reset_bt_pairing();
+        if (res && res.status === "ok") {
+            alert("蓝牙配对记录已成功清空！\n设备正在重启进入可配对状态，现在你可以在电脑或新设备的蓝牙设置中重新搜索配对。");
+            if (isConnected) {
+                onConnectClick();
+            }
+        } else {
+            alert("重置配对失败: " + (res ? res.message : "未知错误"));
+        }
+    } catch (e) {
+        alert("执行重置发生异常: " + e.message);
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = `<svg viewBox="0 0 24 24" width="12" height="12" style="margin-right: 3px; vertical-align: -1px;"><path fill="currentColor" d="M17.71 7.71L12 2h-1v7.59L6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 11 14.41V22h1l5.71-5.71-4.3-4.29 4.3-4.29zM13 5.83l1.88 1.88L13 9.59V5.83zm1.88 10.46L13 18.17v-3.76l1.88 1.88z"/></svg>FORGET BT`;
+        }
     }
 }

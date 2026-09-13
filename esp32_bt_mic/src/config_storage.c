@@ -161,6 +161,22 @@ esp_err_t config_storage_load_hfp_addr(esp_bd_addr_t addr)
     return ret;
 }
 
+esp_err_t config_storage_clear_hfp_addr(void)
+{
+    nvs_handle_t nvs_handle;
+    esp_err_t ret = nvs_open(NVS_NAMESPACE, NVS_READWRITE, &nvs_handle);
+    if (ret != ESP_OK) return ret;
+
+    ret = nvs_erase_key(nvs_handle, NVS_KEY_HFP_ADDR);
+    if (ret == ESP_OK || ret == ESP_ERR_NVS_NOT_FOUND) {
+        nvs_commit(nvs_handle);
+        ret = ESP_OK;
+    }
+    nvs_close(nvs_handle);
+    ESP_LOGI(TAG, "HFP host address cleared from NVS.");
+    return ret;
+}
+
 #define NVS_KEY_TX_POWER   "tx_power"
 #define NVS_KEY_SLEEP_MODE "sleep_mode"
 

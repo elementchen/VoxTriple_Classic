@@ -17,4 +17,9 @@ void button_handler_init(void);
  */
 void button_handler_deinit(void);
 
+/**
+ * @brief Forget paired Bluetooth devices, clear link keys and auto-reconnect MAC, then reboot
+ */
+void system_reset_bt_pairing(void);
+
 #endif /* __BUTTON_HANDLER_H__ */

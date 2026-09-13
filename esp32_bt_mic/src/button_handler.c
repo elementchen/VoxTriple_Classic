@@ -157,6 +157,44 @@ typedef enum {
 static TaskHandle_t s_btn_task_handle = NULL;
 static bool s_btn_task_running = false;
 
+void system_reset_bt_pairing(void)
+{
+    ESP_LOGW(TAG, "Executing BT pairing reset (forget device)...");
+
+    // 1. Flash LED as physical feedback (6 times, 100ms)
+    for (int j = 0; j < 6; j++) {
+        gpio_set_level(s_indicator_led_gpio, (j % 2 == 0) ? 0 : 1);
+        vTaskDelay(pdMS_TO_TICKS(100));
+    }
+    gpio_set_level(s_indicator_led_gpio, 1);
+
+    // 2. Remove pairing bond info from Bluedroid stack
+    int dev_num = esp_bt_gap_get_bond_device_num();
+    if (dev_num > 0) {
+        esp_bd_addr_t *dev_list = (esp_bd_addr_t *)malloc(sizeof(esp_bd_addr_t) * dev_num);
+        if (dev_list) {
+            esp_bt_gap_get_bond_device_list(&dev_num, dev_list);
+            for (int i = 0; i < dev_num; i++) {
+                esp_bt_gap_remove_bond_device(dev_list[i]);
+            }
+            free(dev_list);
+        }
+    }
+
+    esp_bd_addr_t saved_addr;
+    if (config_storage_load_hfp_addr(saved_addr) == ESP_OK) {
+        esp_bt_gap_remove_bond_device(saved_addr);
+    }
+
+    // 3. Clear ONLY the target HFP host address in NVS (preserving key mappings, board profile, sleep timeout, etc.)
+    config_storage_clear_hfp_addr();
+
+    // 4. Restart
+    ESP_LOGW(TAG, "BT pairings cleared. Restarting now...");
+    vTaskDelay(pdMS_TO_TICKS(200));
+    esp_restart();
+}
+
 /**
  * @brief Button monitoring task with debounce
  */
@@ -232,35 +270,26 @@ static void button_task_func(void *arg)
                         classic_hidd_release_key();
                     }
 
-                    /* Button 4 long press (> 3000ms) to clear all BT pairings & reset */
-                    if (i == 3 && duration >= 3000) {
-                        ESP_LOGW(TAG, "Button 4 long pressed! Clearing BT pairings and restarting...");
-                        
-                        // 1. Flash LED as physical feedback
-                        for (int j = 0; j < 6; j++) {
-                            gpio_set_level(s_indicator_led_gpio, (j % 2 == 0) ? 0 : 1);
-                            vTaskDelay(pdMS_TO_TICKS(100));
-                        }
-                        
-                        // 2. Remove pairing bond info from Bluedroid stack
-                        esp_bd_addr_t saved_addr;
-                        if (config_storage_load_hfp_addr(saved_addr) == ESP_OK) {
-                            esp_bt_gap_remove_bond_device(saved_addr);
-                        }
-                        
-                        // 3. Clear application configuration in NVS
-                        config_storage_clear_all();
-                        
-                        // 4. Force restart
-                        esp_restart();
-                    }
-
-
-
                     state[i] = BTN_STATE_IDLE;
                 }
                 break;
             }
+        }
+
+        /* Check combo press: Button 3 (i=2) and Button 4 (i=3) held together for 10 seconds */
+        static uint32_t s_combo_start_time = 0;
+        static bool s_combo_triggered = false;
+        if (state[2] == BTN_STATE_PRESSED && state[3] == BTN_STATE_PRESSED) {
+            if (s_combo_start_time == 0) {
+                s_combo_start_time = now;
+            } else if (!s_combo_triggered && (now - s_combo_start_time) >= 10000) {
+                s_combo_triggered = true;
+                ESP_LOGW(TAG, "Combo: Button 3 + Button 4 held for 10 seconds! Triggering BT pairing reset...");
+                system_reset_bt_pairing();
+            }
+        } else {
+            s_combo_start_time = 0;
+            s_combo_triggered = false;
         }
 
         vTaskDelay(pdMS_TO_TICKS(10));  /* 10ms polling */

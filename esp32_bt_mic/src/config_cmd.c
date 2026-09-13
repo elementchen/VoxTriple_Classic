@@ -12,6 +12,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "board_profile.h"
+#include "button_handler.h"
 
 #define TAG "CONFIG_CMD"
 
@@ -170,6 +171,12 @@ void execute_config_cmd(const char *cmd_line, size_t len, cmd_respond_cb_t respo
                     esp_restart();
                 }
             }
+        } else if (strcmp(cmd, "reset_bt_pairing") == 0) {
+            const char *resp = "{\"status\":\"ok\"}\n";
+            respond_cb(resp, strlen(resp));
+            ESP_LOGW(TAG, "Resetting BT pairing via SPP command. Rebooting in 500ms...");
+            vTaskDelay(pdMS_TO_TICKS(500));
+            system_reset_bt_pairing();
         }
     }
     cJSON_Delete(root);

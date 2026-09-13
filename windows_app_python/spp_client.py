@@ -354,6 +354,11 @@ class SppClient:
             return True
         return False
 
+    async def reset_bt_pairing(self) -> bool:
+        """Send command to reset Bluetooth pairings on ESP32 (forget device & reboot)."""
+        resp = await self._send_cmd({"cmd": "reset_bt_pairing"})
+        return resp is not None and resp.get("status") == "ok"
+
     async def get_config(self) -> dict | None:
         """Fetch and return full configuration dictionary formatted for UI client."""
         ok = await self._fetch_config()

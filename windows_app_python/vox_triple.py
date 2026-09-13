@@ -129,6 +129,19 @@ class Api:
         ok = future.result(timeout=5.0)
         return {"success": ok, "message": "ok" if ok else "write failed"}
 
+    def reset_bt_pairing(self) -> dict:
+        """Expose API to frontend to forget BT pairings on the device and reboot."""
+        if not self.spp or not self.spp.is_connected:
+            return {"status": "error", "message": "Device not connected"}
+        future = run_coro(self.spp.reset_bt_pairing())
+        try:
+            ok = future.result(timeout=4.0)
+            if ok:
+                return {"status": "ok"}
+            return {"status": "error", "message": "Command rejected"}
+        except Exception as e:
+            return {"status": "error", "message": str(e)}
+
     def select_local_bin(self) -> str | None:
         """Select a local firmware file using Windows native file dialog via Tkinter fallback to ensure non-UI thread safety."""
         log.info("Opening Windows file selection dialog via Tkinter...")
