@@ -27,7 +27,7 @@ static const board_profile_t s_board_profiles[BOARD_MODEL_MAX] = {
         .i2s_bck_gpio = GPIO_NUM_27,
         .i2s_ws_gpio = GPIO_NUM_26,
         .i2s_data_gpio = GPIO_NUM_25,
-        .btn_gpios = { GPIO_NUM_4, GPIO_NUM_18, GPIO_NUM_19, GPIO_NUM_23 }
+        .btn_gpios = { GPIO_NUM_4, GPIO_NUM_19, GPIO_NUM_23, GPIO_NUM_18 }
     }
 };
 
