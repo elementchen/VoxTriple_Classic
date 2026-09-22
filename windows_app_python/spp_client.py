@@ -23,6 +23,11 @@ class _EsptoolProgressWriter:
         self.total_size = total_size
         self.cb = cb
         self.pct_re = re.compile(r'\((\d+)\s*%\)')
+        self.encoding = getattr(orig_stdout, "encoding", "utf-8") or "utf-8"
+        self.errors = getattr(orig_stdout, "errors", "replace") or "replace"
+
+    def isatty(self):
+        return False
 
     def write(self, text):
         if self.orig_stdout:
@@ -482,15 +487,17 @@ class SppClient:
         # 1. Release serial port so esptool has exclusive physical access
         log.info(f"Direct Flash: Closing pyserial handle on {port}...")
         self.disconnect_sync()
-        await asyncio.sleep(0.5)
+        await asyncio.sleep(1.0)
 
         # 2. Run esptool in thread pool executor to prevent blocking asyncio loop
         loop = asyncio.get_running_loop()
 
         def do_esptool(baud: int) -> bool:
             old_stdout = sys.stdout
+            old_stderr = sys.stderr
             writer = _EsptoolProgressWriter(old_stdout, total_size, progress_callback)
             sys.stdout = writer
+            sys.stderr = writer
             args = [
                 "--chip", "esp32",
                 "--port", port,
@@ -508,12 +515,18 @@ class SppClient:
                 esptool.main(args)
                 return True
             except SystemExit as se:
+                if se.code != 0:
+                    self.last_error = f"esptool exit code {se.code}"
+                    log.error(f"esptool exited with non-zero exit code: {se.code}")
                 return (se.code == 0)
             except Exception as e:
-                log.error(f"esptool execution error at {baud} baud: {e}")
+                import traceback
+                self.last_error = str(e)
+                log.error(f"esptool execution error at {baud} baud: {e}\n{traceback.format_exc()}")
                 return False
             finally:
                 sys.stdout = old_stdout
+                sys.stderr = old_stderr
 
         # Try high speed 460800 first (takes only ~13s)
         flash_ok = await loop.run_in_executor(None, do_esptool, 460800)
@@ -523,7 +536,7 @@ class SppClient:
             flash_ok = await loop.run_in_executor(None, do_esptool, 115200)
 
         if not flash_ok:
-            log.error("Direct esptool flash failed at all baud rates.")
+            log.error(f"Direct esptool flash failed: {getattr(self, 'last_error', 'unknown')}")
             # Attempt to reconnect anyway so GUI remains operational
             await self.connect(port)
             return False

@@ -18,7 +18,15 @@ import serial.tools.list_ports
 
 import spp_client
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(name)s] %(message)s")
+log_file = os.path.join(os.path.expanduser("~"), "VoxTriple.log")
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(name)s] %(message)s",
+    handlers=[
+        logging.FileHandler(log_file, encoding="utf-8", mode="a"),
+        logging.StreamHandler(sys.stdout) if sys.stdout else logging.NullHandler()
+    ]
+)
 log = logging.getLogger("VoxTriple")
 
 # ── Async background loop ──────────────────────────────────────────
@@ -240,11 +248,12 @@ class Api:
                 if ok:
                     self._window.evaluate_js("alert('OTA Upgrade Completed Successfully! The device is now rebooting.\\n固件升级成功！开发板正在重启，请稍候。')")
                 else:
-                    self._window.evaluate_js("alert('OTA Upgrade Failed! Please reconnect and try again.\\n固件写入失败，请检查供电线并复位重新连接测试！')")
+                    err_msg = getattr(self.spp, 'last_error', '') or '写入握手超时或串口未响应'
+                    self._window.evaluate_js(f"alert('固件写入失败！\\n原因: {err_msg}\\n请检查供电线并复位重新连接测试！')")
         except Exception as e:
             log.error(f"Flash failed: {e}")
             if self._window:
-                self._window.evaluate_js(f"alert('Flash failed: {str(e)}')")
+                self._window.evaluate_js(f"alert('固件写入异常: {str(e)}')")
 
     async def _download_firmware_async(self, download_url, save_path):
         loop = asyncio.get_running_loop()
