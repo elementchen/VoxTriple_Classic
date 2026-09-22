@@ -35,7 +35,7 @@ static const char *TAG = "BTN_HANDLER";
 
 #include "board_profile.h"
 
-static gpio_num_t s_indicator_led_gpio = GPIO_NUM_16;
+static gpio_num_t s_indicator_led_gpio = GPIO_NUM_22;
 #define DEFAULT_INACTIVITY_MIN   5    /* Default: 5 min deep sleep timeout */
 #define MIN_INACTIVITY_MIN       1
 #define MAX_INACTIVITY_MIN       120
@@ -43,9 +43,9 @@ static gpio_num_t s_indicator_led_gpio = GPIO_NUM_16;
 static TimerHandle_t s_inactivity_timer = NULL;
 static gpio_num_t s_button_pins[BUTTON_NUM] = {
     GPIO_NUM_4,
-    GPIO_NUM_18,
     GPIO_NUM_19,
     GPIO_NUM_23,
+    GPIO_NUM_18,
 };
 
 static bool is_rtc_gpio(gpio_num_t gpio)

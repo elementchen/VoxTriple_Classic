@@ -58,7 +58,7 @@ let currentConfigs = [
 let selectedOtaPath = "";
 let isConnected = false;
 let capturingIdx = -1;
-let currentBoardModel = 0;
+let currentBoardModel = 1;
 let currentSleepTimeoutMin = 5;
 
 // ── Dom Initialization ───────────────────────────────────────────────────
