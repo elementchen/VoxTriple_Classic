@@ -3,6 +3,9 @@
 Replaces the BleClient (ble_client.py) using pyserial.
 Bridges serial sync-read thread to asyncio futures for smooth GUI interaction.
 """
+import os
+import sys
+import re
 import asyncio
 import json
 import logging
@@ -11,6 +14,38 @@ import serial
 import serial.tools.list_ports
 
 log = logging.getLogger(__name__)
+
+
+class _EsptoolProgressWriter:
+    """Captures esptool stdout to extract flash write percentage and invoke GUI progress callback."""
+    def __init__(self, orig_stdout, total_size, cb=None):
+        self.orig_stdout = orig_stdout
+        self.total_size = total_size
+        self.cb = cb
+        self.pct_re = re.compile(r'\((\d+)\s*%\)')
+
+    def write(self, text):
+        if self.orig_stdout:
+            try:
+                self.orig_stdout.write(text)
+            except Exception:
+                pass
+        m = self.pct_re.search(text)
+        if m:
+            pct = int(m.group(1))
+            if self.cb:
+                written = int(self.total_size * pct / 100)
+                try:
+                    self.cb(written, self.total_size)
+                except Exception:
+                    pass
+
+    def flush(self):
+        if self.orig_stdout:
+            try:
+                self.orig_stdout.flush()
+            except Exception:
+                pass
 
 
 class SppClient:
@@ -404,50 +439,141 @@ class SppClient:
             await self._fetch_config()
         return self._config_cache.get("version", "Unknown")
 
-    async def upload_firmware(self, bin_path: str, progress_callback=None, mode="classic") -> bool:
-        """Upload firmware .bin file to ESP32 via chunked VFS serial OTA protocol."""
+    async def upload_firmware(self, bin_path: str, progress_callback=None, mode="auto") -> bool:
+        """Upload firmware .bin file to ESP32 using direct esptool hardware flash with legacy fallback."""
         if not self._connected or not self._ser:
-            log.error("OTA failed: Serial client is not connected.")
+            log.error("Flash failed: Serial client is not connected.")
             return False
-            
+
+        if not os.path.isfile(bin_path):
+            log.error(f"Firmware binary file not found: {bin_path}")
+            return False
+
+        total_size = os.path.getsize(bin_path)
+        port = self._port or (self._ser.port if self._ser else None)
+        log.info(f"Starting firmware upload on {port}. File: {bin_path} ({total_size} bytes, Mode: {mode})")
+
+        has_esptool = False
+        try:
+            import esptool
+            has_esptool = True
+        except ImportError:
+            log.warning("esptool module not available in environment, falling back to legacy OTA.")
+
+        # If connected via physical serial port and esptool is available, use direct hardware flash
+        if has_esptool and port and mode != "legacy":
+            log.info("Executing Direct Hardware Flash Engine (Scheme B)...")
+            return await self._upload_firmware_esptool(bin_path, total_size, port, progress_callback)
+        else:
+            log.info("Executing Legacy Chunked OTA Engine...")
+            return await self._upload_firmware_legacy(bin_path, total_size, progress_callback)
+
+    async def _upload_firmware_esptool(self, bin_path: str, total_size: int, port: str, progress_callback=None) -> bool:
+        """Directly flash ESP32 via esptool Python API, cross-platform compatible with CH340 & CP2102."""
+        import esptool
+
+        # Smart flash offset:
+        # Full merged image (> 1MB or containing 'merged') flashes at 0x0
+        # Single App partition (standard OTA bin ~930KB) flashes at 0x20000
+        is_merged = (total_size > 1000000) or ("merged" in os.path.basename(bin_path).lower())
+        flash_offset = "0x0" if is_merged else "0x20000"
+        log.info(f"Direct Flash: Target flash offset: {flash_offset} (Merged: {is_merged})")
+
+        # 1. Release serial port so esptool has exclusive physical access
+        log.info(f"Direct Flash: Closing pyserial handle on {port}...")
+        self.disconnect_sync()
+        await asyncio.sleep(0.5)
+
+        # 2. Run esptool in thread pool executor to prevent blocking asyncio loop
+        loop = asyncio.get_running_loop()
+
+        def do_esptool(baud: int) -> bool:
+            old_stdout = sys.stdout
+            writer = _EsptoolProgressWriter(old_stdout, total_size, progress_callback)
+            sys.stdout = writer
+            args = [
+                "--chip", "esp32",
+                "--port", port,
+                "--baud", str(baud),
+                "--before", "default-reset",
+                "--after", "hard-reset",
+                "write-flash",
+                "--flash-mode", "dio",
+                "--flash-size", "4MB",
+                "--flash-freq", "40m",
+                flash_offset, bin_path
+            ]
+            try:
+                log.info(f"Invoking esptool.main on {port} with baud {baud}...")
+                esptool.main(args)
+                return True
+            except SystemExit as se:
+                return (se.code == 0)
+            except Exception as e:
+                log.error(f"esptool execution error at {baud} baud: {e}")
+                return False
+            finally:
+                sys.stdout = old_stdout
+
+        # Try high speed 460800 first (takes only ~13s)
+        flash_ok = await loop.run_in_executor(None, do_esptool, 460800)
+        if not flash_ok:
+            log.warning("High-speed 460800 flash attempt failed. Retrying at 115200 baud...")
+            await asyncio.sleep(1.0)
+            flash_ok = await loop.run_in_executor(None, do_esptool, 115200)
+
+        if not flash_ok:
+            log.error("Direct esptool flash failed at all baud rates.")
+            # Attempt to reconnect anyway so GUI remains operational
+            await self.connect(port)
+            return False
+
+        log.info("Direct flash succeeded! Device is rebooting via hardware reset pulse.")
+        if progress_callback:
+            try:
+                progress_callback(total_size, total_size)
+            except Exception:
+                pass
+
+        # 3. Wait 2.0s for hardware reset to stabilize and re-establish connection
+        await asyncio.sleep(2.0)
+        log.info(f"Re-connecting to {port} to restore application link...")
+        for retry in range(3):
+            if await self.connect(port):
+                log.info("Re-connected successfully to device after flash!")
+                break
+            await asyncio.sleep(1.0)
+
+        return True
+
+    async def _upload_firmware_legacy(self, bin_path: str, total_size: int, progress_callback=None) -> bool:
+        """Legacy chunked VFS serial OTA protocol fallback."""
         try:
             with open(bin_path, "rb") as f:
                 bin_data = f.read()
         except Exception as e:
             log.error(f"Failed to read firmware binary file: {e}")
             return False
-            
-        total_size = len(bin_data)
-        log.info(f"Starting OTA update. Firmware size: {total_size} bytes (Mode: {mode})...")
-        
+
         # Clear any stale data in ota_queue
         while not self._ota_queue.empty():
             self._ota_queue.get_nowait()
-            
-        # 1. Send ota_start command (using 10.0s timeout to allow partition flash erasing)
+
+        # 1. Send ota_start command
         resp = await self._send_cmd({"cmd": "ota_start", "size": total_size}, timeout=10.0)
         if not resp:
             log.error("OTA start failed: No response from device.")
             return False
-            
+
         if resp.get("status") == "ok" and resp.get("reboot") == 1:
-            # Device needs reboot into clean OTA mode
-            log.info("Device is rebooting into clean OTA mode to ensure zero-interference flash erase...")
-            
-            # Remember current port to reconnect
+            log.info("Device is rebooting into clean OTA mode...")
             port = self._ser.port
             await self.disconnect()
-            
-            # Wait 3.0s for device to reboot and initialize serial console
             await asyncio.sleep(3.0)
-            
             log.info(f"Reconnecting to {port} in clean OTA mode...")
             if not await self.connect(port):
                 log.error("Failed to reconnect in clean OTA mode.")
                 return False
-                
-            # Resend ota_start under clean mode
-            log.info("Re-sending OTA start handshake in clean mode...")
             resp = await self._send_cmd({"cmd": "ota_start", "size": total_size}, timeout=10.0)
             if not resp or resp.get("status") != "ok":
                 log.error(f"Clean OTA start failed: {resp.get('reason') if resp else 'No response'}")
@@ -455,69 +581,45 @@ class SppClient:
         elif resp.get("status") != "ok":
             log.error(f"OTA start failed: {resp.get('reason')}")
             return False
-            
+
         log.info("OTA handshake success. Transferring binary payload in chunks...")
-        
-        # Enable OTA mode to route responses into ota_queue
         self._ota_mode = True
-        
         try:
-            # 2. Loop to write binary chunks with strict flow control (Classic Sync Mode)
-            # Optimized to synchronize every 16KB to prevent full-duplex driver lockups,
-            # while strictly validating progress to prevent false success.
-            # Using 256 bytes chunks to drastically shorten single packet physical transmission time (22ms at 115200).
-            # This eliminates the risk of UART FIFO overrun during concurrent Flash Block Erase cycles,
-            # as no data flows on the wire while the ESP32 is busy performing internal flash writes.
             chunk_size = 256
             current_total = 0
             for i in range(0, total_size, chunk_size):
                 chunk = bin_data[i:i+chunk_size]
                 expected_total = i + len(chunk)
-                
-                # 1. Pre-emit sync for trailing tail chunk to prevent final block overflow
-                # Since the ESP32 firmware emits progress packets strictly at 1KB boundaries,
-                # we synchronize up to the nearest 1KB multiple to prevent handshake deadlocks on fractional blocks.
                 is_last_chunk = (i + chunk_size >= total_size)
                 if is_last_chunk and i > 0:
                     target_sync = (i // 1024) * 1024
-                    log.info(f"Syncing prior blocks with board before sending tail chunk (confirmed: {current_total}/{target_sync})...")
                     try:
                         while current_total < target_sync:
                             chunk_resp = await asyncio.wait_for(self._ota_queue.get(), timeout=8.0)
                             if chunk_resp:
                                 if chunk_resp.get("status") == "error":
-                                    log.error(f"OTA tail-sync failed: {chunk_resp.get('reason')}")
                                     return False
                                 if chunk_resp.get("status") == "done":
-                                    log.info("OTA upgrade completed successfully! The device is now rebooting.")
                                     return True
                                 current_total = max(current_total, chunk_resp.get("total_written", 0))
                     except asyncio.TimeoutError:
-                        log.error(f"Timeout waiting for sync before tail chunk. Confirmed: {current_total}/{target_sync}")
                         return False
-                    log.info("Sync complete. Emitting trailing fractional chunk...")
-                    
+
                 self._ser.write(chunk)
-                self._ser.flush()  # Force OS port to instantly emit binary buffer
-                
-                # 2. Non-blocking update of progress queue
+                self._ser.flush()
+
                 while not self._ota_queue.empty():
                     try:
                         chunk_resp = self._ota_queue.get_nowait()
                         if chunk_resp:
                             if chunk_resp.get("status") == "error":
-                                log.error(f"OTA chunk write failed: {chunk_resp.get('reason')}")
                                 return False
                             if chunk_resp.get("status") == "done":
-                                log.info("OTA upgrade completed successfully! The device is now rebooting.")
                                 return True
                             current_total = max(current_total, chunk_resp.get("total_written", 0))
                     except asyncio.QueueEmpty:
                         break
-                        
-                # 3. Synchronize strictly every 16KB to prevent Windows serial driver lockup
-                # while ensuring absolute safety against buffer overrun.
-                # We synchronize up to the nearest 1KB multiple to match ESP32's 1KB ACK boundaries.
+
                 if i > 0 and i % (1024 * 16) == 0:
                     target_sync = (i // 1024) * 1024
                     try:
@@ -525,49 +627,34 @@ class SppClient:
                             chunk_resp = await asyncio.wait_for(self._ota_queue.get(), timeout=10.0)
                             if chunk_resp:
                                 if chunk_resp.get("status") == "error":
-                                    log.error(f"OTA sync failed: {chunk_resp.get('reason')}")
                                     return False
                                 if chunk_resp.get("status") == "done":
-                                    log.info("OTA upgrade completed successfully! The device is now rebooting.")
                                     return True
                                 current_total = max(current_total, chunk_resp.get("total_written", 0))
                     except asyncio.TimeoutError:
-                        log.error(f"OTA handshake timeout waiting for {target_sync} bytes. Current confirmed: {current_total}")
                         return False
-                    
+
                 if progress_callback:
                     progress_callback(max(current_total, expected_total), total_size)
-                    
-                # Yield control for 5ms to allow host UART driver and power ripple stabilization.
-                # Since chunk_size is 256 bytes, 5ms is extremely safe and boosts speed significantly.
+
                 await asyncio.sleep(0.005)
-            
-            # 3. Wait for final OTA done & partition boot set response (Classic Mode)
+
             log.info("All firmware chunks sent. Waiting for final verification on device...")
             try:
                 while True:
                     final_resp = await asyncio.wait_for(self._ota_queue.get(), timeout=8.0)
                     if not final_resp:
-                        log.error("Invalid empty response from device.")
                         return False
-                    
                     status = final_resp.get("status")
                     if status == "done":
-                        log.info("OTA upgrade completed successfully! The device is now rebooting.")
                         return True
                     elif status == "error":
-                        log.error(f"OTA verification failed: {final_resp.get('reason')}")
                         return False
                     elif status in ("progress", "next"):
-                        # This is just a trailing chunk progress confirmation, keep waiting for the final validation done signal!
-                        log.info(f"Received confirmation progress: {final_resp.get('total_written')}/{total_size}")
                         continue
                     else:
-                        log.error(f"Unknown status received: {status}")
                         return False
             except asyncio.TimeoutError:
-                log.error("OTA final verification timed out waiting for success confirmation.")
                 return False
         finally:
-            # Always ensure OTA mode is turned off on exit
             self._ota_mode = False
