@@ -3,9 +3,9 @@
 # VoxTriple 🎙️⌨️
 ### ESP32 蓝牙手持语音输入机械终端<br/>Handheld Bluetooth Voice-to-Text Mechanical Terminal
 
-[![Release](https://img.shields.io/github/v/release/elementchen/VoxTriple?color=007AFF&label=Release&logo=github)](https://github.com/elementchen/VoxTriple/releases/latest)
+[![Release](https://img.shields.io/github/v/release/elementchen/VoxTriple_Classic?color=007AFF&label=Release&logo=github)](https://github.com/elementchen/VoxTriple_Classic/releases/latest)
 [![License](https://img.shields.io/badge/license-MIT-34C759.svg)](LICENSE)
-[![Platform](https://img.shields.io/badge/platform-ESP32%20%7C%20Windows%20%7C%20macOS-8E8E93.svg)](https://github.com/elementchen/VoxTriple)
+[![Platform](https://img.shields.io/badge/platform-ESP32%20%7C%20Windows%20%7C%20macOS-8E8E93.svg)](https://github.com/elementchen/VoxTriple_Classic)
 [![ESP-IDF](https://img.shields.io/badge/framework-ESP--IDF%20v5.5-E7352C.svg?logo=espressif)](https://docs.espressif.com/projects/esp-idf/en/stable/esp32/index.html)
 [![Python](https://img.shields.io/badge/app-Python%203.10%20%7C%20PyQt5-3776AB.svg?logo=python)](https://www.python.org/)
 
@@ -85,7 +85,7 @@ VoxTriple 配备全自研的现代化桌面配置中心（**Windows 原生免安
 
 ### 📥 1. 下载最新发行包 (Release Assets)
 
-前往 [👉 GitHub Releases 页面](https://github.com/elementchen/VoxTriple/releases/latest) 下载最新发布的成品物料：
+前往 [👉 GitHub Releases 页面](https://github.com/elementchen/VoxTriple_Classic/releases/latest) 下载最新发布的成品物料：
 
 | 物料文件 | 用途说明 |
 | :--- | :--- |

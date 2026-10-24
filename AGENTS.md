@@ -67,7 +67,7 @@ AI 仅对以下核心目录及其必要根级配置文件拥有修改、编译�
 2. **上位机编译与输出物料**：
    - 免安装独立可执行程序：`windows_app_python/dist/VoxTriple_v<version>.exe`
 3. **GitHub Release 创建与产物挂载**：
-   - 必须通过 `gh release create` 将上述固件与上位机 EXE 文件全部作为 release asset 挂载上传到 GitHub Release；
-   - 必须同步覆盖项目的双远程仓库：
+   - 必须通过 `gh release create` / `gh release upload` 将上述固件与上位机 EXE 文件全部作为 release asset 挂载上传到 GitHub Release；
+   - 目标远程仓库为项目的官方主仓库：
      - `origin` (`elementchen/VoxTriple_Classic`)
-     - `github` (`elementchen/VoxTriple`)
+     - （注：`VoxTriple` 仓库将独立用于 18650 硬件形态衍生产品，当前 mini 轻薄规范产品全生命周期均在 `VoxTriple_Classic` 中维护）
