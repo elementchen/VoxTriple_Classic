@@ -77,7 +77,7 @@ static void hardware_switch_monitor_task(void *pvParameters)
 
         if (current_slot != last_sampled_slot) {
             debounce_count++;
-            if (debounce_count >= 3) { // 连续 150ms 稳定保持新状态，防抖通过
+            if (debounce_count >= 8) { // 连续 400ms 稳定保持新状态，强抗噪防抖通过
                 ESP_LOGW(TAG, "Hardware slide switch toggled detected: Slot %d -> %d", last_sampled_slot, current_slot);
                 last_sampled_slot = current_slot;
                 debounce_count = 0;
